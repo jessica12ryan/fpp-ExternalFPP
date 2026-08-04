@@ -1,0 +1,9 @@
+# Generated runtime data - never commit these
+.DS_Store
+*.log
+
+/config/settings.json
+/config/plugin.fpp-ExternalFPP.htpasswd
+
+# Local Apache test output
+/etc/

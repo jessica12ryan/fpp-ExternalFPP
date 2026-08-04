@@ -1,0 +1,48 @@
+{
+	"repoName": "fpp-ExternalFPP",
+	"name": "External FPP Web Access",
+	"author": "jessica12ryan",
+	"description": "Opens an additional TCP port on your FPP that serves the FPP web UI behind a username and password (HTTP Basic Auth). Uses FPP's built-in Apache web server as a reverse proxy, so no extra packages are required. Ideal for safely exposing the FPP UI to guest or remote networks without touching the normal local UI.",
+	"homeURL": "https://github.com/jessica12ryan/fpp-ExternalFPP",
+	"srcURL": "https://github.com/jessica12ryan/fpp-ExternalFPP.git",
+	"bugURL": "https://github.com/jessica12ryan/fpp-ExternalFPP/issues",
+	"iconURL": "https://raw.githubusercontent.com/jessica12ryan/fpp-ExternalFPP/main/icon.png",
+	"versions": [
+		{
+			"minFPPVersion": "8.0",
+			"maxFPPVersion": "8.99",
+			"branch": "main",
+			"sha": "",
+			"allowUpdates": 1,
+			"dependencies": {
+				"plugins": [],
+				"packages": [],
+				"scripts": []
+			}
+		},
+		{
+			"minFPPVersion": "9.0",
+			"maxFPPVersion": "9.99",
+			"branch": "main",
+			"sha": "",
+			"allowUpdates": 1,
+			"dependencies": {
+				"plugins": [],
+				"packages": [],
+				"scripts": []
+			}
+		},
+		{
+			"minFPPVersion": "10.0",
+			"maxFPPVersion": "0",
+			"branch": "main",
+			"sha": "",
+			"allowUpdates": 1,
+			"dependencies": {
+				"plugins": [],
+				"packages": [],
+				"scripts": []
+			}
+		}
+	]
+}
