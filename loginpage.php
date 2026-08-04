@@ -77,8 +77,8 @@ if (file_exists($loginPageFile)) {
 
             <p>Notes:</p>
             <ul>
-                <li>The password is checked against the same username/password configured in the
-                    <b>Config</b> tab.</li>
+                <li>The username/password submitted here is checked against the users configured in the
+                    <b>Users</b> tab.</li>
                 <li>After a successful login the visitor lands on <code>/</code> (the FPP web UI).</li>
                 <li>To sign out, visit <code>/logout</code> in the browser.</li>
                 <li>When the fields above are missing, saving shows a warning so you can fix the

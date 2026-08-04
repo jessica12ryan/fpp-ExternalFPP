@@ -58,8 +58,7 @@ function efppLoadSettings() {
         'enabled' => 0,
         'port' => 8080,
         'backend_port' => BACKEND_DEFAULT_PORT,
-        'username' => '',
-        'password' => ''
+        'users' => array()
     );
     if (!file_exists(SETTINGS_FILE)) {
         return $defaults;
@@ -68,7 +67,26 @@ function efppLoadSettings() {
     if (!is_array($s)) {
         return $defaults;
     }
-    return array_merge($defaults, $s);
+    $s = array_merge($defaults, $s);
+    // Migrate the old single username/password layout to the users list.
+    if (empty($s['users']) && !empty($s['username']) && !empty($s['password'])) {
+        $s['users'] = array(array('username' => $s['username'], 'password' => $s['password']));
+    }
+    unset($s['username'], $s['password']);
+    return $s;
+}
+
+function efppUsersFromSettings($s) {
+    $users = array();
+    foreach (($s['users'] ?? array()) as $u) {
+        if (is_array($u) && isset($u['username']) && trim((string)$u['username']) !== '') {
+            $users[] = array(
+                'username' => trim((string)$u['username']),
+                'password' => (string)($u['password'] ?? '')
+            );
+        }
+    }
+    return $users;
 }
 
 /**
@@ -118,36 +136,63 @@ function efppEnsureLoginPage() {
     return true;
 }
 
-function efppWriteHtpasswd($username, $password) {
-    if ($username === '' || $password === '') {
-        if (file_exists(HTPASSWD_FILE)) {
-            @unlink(HTPASSWD_FILE);
-        }
-        return array(true, 'Removed password file (no credentials configured)');
-    }
+/**
+ * Writes every user to the Apache password file. Prefers bcrypt via the
+ * htpasswd binary, falls back to a {SHA} hash that every Apache 2.4 build
+ * supports. Returns array(true, message) on success, array(false, error) on
+ * failure.
+ */
+function efppWriteHtpasswd($users) {
+    $users = efppUsersFromSettings(array('users' => $users));
 
     // Normalize ownership so the web server (fpp user) can always read/overwrite it.
     efppRun('chown fpp:fpp ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
     efppRun('chmod 664 ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
-    @unlink(HTPASSWD_FILE);
 
-    $r = efppRun('htpasswd -b -B -c ' . escapeshellarg(HTPASSWD_FILE) . ' '
-        . escapeshellarg($username) . ' ' . escapeshellarg($password));
-    if ($r['code'] === 0 && file_exists(HTPASSWD_FILE)) {
+    if (empty($users)) {
+        if (file_exists(HTPASSWD_FILE)) {
+            @unlink(HTPASSWD_FILE);
+        }
+        return array(true, 'Removed password file (no users configured)');
+    }
+
+    $which = efppRun('command -v htpasswd');
+    $htpasswd = ($which['code'] === 0 && trim($which['output']) !== '') ? trim($which['output']) : '';
+
+    if ($htpasswd === '') {
+        // Fallback: {SHA} + base64(SHA-1) - accepted by mod_authn_file everywhere.
+        $content = '';
+        foreach ($users as $u) {
+            $content .= $u['username'] . ':{SHA}' . base64_encode(sha1($u['password'], true)) . "\n";
+        }
+        if (@file_put_contents(HTPASSWD_FILE, $content) === false) {
+            return array(false, 'Could not write the password file to ' . HTPASSWD_FILE);
+        }
         efppRun('chown fpp:fpp ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
         efppRun('chmod 644 ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
-        return array(true, 'Password file written using bcrypt');
+        return array(true, 'Password file written for ' . count($users) . ' user(s) using {SHA} fallback (install apache2-utils for bcrypt)');
     }
-    @unlink(HTPASSWD_FILE);
 
-    // Fallback: {SHA} + base64(SHA-1) - accepted by mod_authn_file everywhere.
-    $content = $username . ':{SHA}' . base64_encode(sha1($password, true)) . "\n";
-    if (@file_put_contents(HTPASSWD_FILE, $content) === false) {
-        return array(false, 'Could not write the password file to ' . HTPASSWD_FILE);
+    @unlink(HTPASSWD_FILE);
+    $first = true;
+    $failed = array();
+    foreach ($users as $u) {
+        $r = efppRun($htpasswd . ' -b -B ' . ($first ? '-c ' : '') . escapeshellarg(HTPASSWD_FILE) . ' '
+            . escapeshellarg($u['username']) . ' ' . escapeshellarg($u['password']));
+        if ($r['code'] !== 0) {
+            $failed[] = $u['username'];
+        }
+        $first = false;
     }
-    efppRun('chown fpp:fpp ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
-    efppRun('chmod 644 ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
-    return array(true, 'Password file written using {SHA} fallback (install apache2-utils for bcrypt)');
+
+    if (empty($failed) && file_exists(HTPASSWD_FILE)) {
+        efppRun('chown fpp:fpp ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
+        efppRun('chmod 644 ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
+        return array(true, 'Password file written for ' . count($users) . ' user(s) using bcrypt');
+    }
+
+    @unlink(HTPASSWD_FILE);
+    return array(false, 'Could not write the password file. htpasswd failed for: ' . implode(', ', $failed));
 }
 
 function efppBuildApacheConf($port, $backendPort, $htpasswdFile, $loginPageFile) {
@@ -295,8 +340,7 @@ function efppApply() {
     $enabled = !empty($s['enabled']);
     $port = (int)$s['port'];
     $backendPort = (int)$s['backend_port'];
-    $username = trim($s['username']);
-    $password = $s['password'];
+    $users = efppUsersFromSettings($s);
 
     efppEnsureConfigDir();
     efppEnsureLoginPage();
@@ -319,8 +363,8 @@ function efppApply() {
     if ($port === $backendPort && $port !== 0) {
         $errors[] = 'The listen port and the backend (FPP web) port must be different.';
     }
-    if ($enabled && ($username === '' || $password === '')) {
-        $errors[] = 'The plugin is enabled but no username/password are configured. Set both before enabling.';
+    if ($enabled && empty($users)) {
+        $errors[] = 'The plugin is enabled but no users are configured. Create at least one user before enabling.';
     }
 
     if (!empty($errors)) {
@@ -333,7 +377,7 @@ function efppApply() {
         return array('success' => false, 'errors' => $errors, 'messages' => $messages);
     }
 
-    list($ok, $msg) = efppWriteHtpasswd($username, $password);
+    list($ok, $msg) = efppWriteHtpasswd($users);
     $messages[] = $msg;
     if (!$ok) {
         efppLog('ERROR: ' . $msg);

@@ -34,8 +34,8 @@ $pluginDir = __DIR__;
             <ol>
                 <li>Open <b>Content Setup &rarr; External FPP</b></li>
                 <li>Set a <b>Listen port</b> (e.g. <code>8080</code>)</li>
-                <li>Enter a <b>Username</b> and <b>Password</b></li>
-                <li>Click <b>Save &amp; Apply</b></li>
+                <li>Add at least one <b>user</b> in the <b>Users</b> tab (username + password)</li>
+                <li>Click <b>Save &amp; Apply</b>, then use the toggle button to <b>enable</b> the external access</li>
                 <li>Browse to <code>http://&lt;fpp-ip&gt;:8080/</code> &mdash; you will be asked to log in</li>
             </ol>
 
@@ -114,9 +114,10 @@ sudo tail -50 /home/fpp/media/logs/apache2-externalfpp-error.log</pre>
 
             <h4>Getting sent back to the login page even with the right password</h4>
             <p>
-                The password may have been changed without re-applying, or the password file may have
-                been overwritten. Re-enter the password in the Config tab and click <b>Save &amp; Apply</b>.
-                Also check the <b>Login Page</b> tab: if the saved page is missing the required
+                The password may have been changed but not written to the password file yet, or the
+                password file may have been overwritten. Set the user's password again in the
+                <b>Users</b> tab (add the user or use <b>Change Password</b>). Also check the
+                <b>Login Page</b> tab: if the saved page is missing the required
                 <code>httpd_username</code> / <code>httpd_password</code> form fields, logging in
                 cannot work.
             </p>

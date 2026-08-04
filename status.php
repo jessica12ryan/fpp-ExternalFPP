@@ -57,8 +57,10 @@ var efppStatus = {
                     ['External access', s.enabled ? '<span class="text-success">&#9679; Enabled</span>' : '<span class="text-danger">&#9679; Disabled</span>'],
                     ['Listen port', s.port],
                     ['Backend (FPP web) port', s.backend_port],
-                    ['Username', s.username ? escHtml(s.username) : '<span class="text-danger">Not set</span>'],
-                    ['Password configured', s.has_password ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
+                    ['Users', s.user_count > 0
+                        ? s.users.map(escHtml).join(', ')
+                        : '<span class="text-danger">None (' + (s.enabled ? 'plugin cannot stay enabled' : 'add a user to enable') + ')</span>'],
+                    ['Users count', s.user_count],
                     ['Apache vhost enabled', s.apache_conf_enabled ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Custom login page', s.login_page ? '<span class="text-success">Yes</span>' : '<span class="text-warning">No (default)</span>'],
@@ -82,6 +84,9 @@ var efppStatus = {
                 }
                 if (!s.enabled && s.configured) {
                     html += '<p class="text-warning" style="margin-top:8px;">The external port is currently disabled. Go to the Config tab to enable it.</p>';
+                }
+                if (!s.enabled && s.user_count === 0) {
+                    html += '<p class="text-danger" style="margin-top:8px;">No users are configured. Add at least one user in the Users tab before enabling the plugin.</p>';
                 }
                 $('#efpp_status_table').html(html);
             },

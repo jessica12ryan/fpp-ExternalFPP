@@ -41,8 +41,7 @@ function efppLoadSettings() {
         'enabled' => 0,
         'port' => 8080,
         'backend_port' => 80,
-        'username' => '',
-        'password' => ''
+        'users' => array()
     );
     if (!file_exists(EFPP_SETTINGS_FILE)) {
         return $defaults;
@@ -51,7 +50,13 @@ function efppLoadSettings() {
     if (!is_array($s)) {
         return $defaults;
     }
-    return array_merge($defaults, $s);
+    $s = array_merge($defaults, $s);
+    // Migrate the old single username/password layout to the users list.
+    if (empty($s['users']) && !empty($s['username']) && !empty($s['password'])) {
+        $s['users'] = array(array('username' => $s['username'], 'password' => $s['password']));
+    }
+    unset($s['username'], $s['password']);
+    return $s;
 }
 
 function efppSaveSettingsFile($s) {
@@ -59,6 +64,108 @@ function efppSaveSettingsFile($s) {
         @mkdir(EFPP_PLUGIN_DIR . '/config', 0775, true);
     }
     return @file_put_contents(EFPP_SETTINGS_FILE, json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+}
+
+function efppUsersFromSettings($s) {
+    $users = array();
+    foreach (($s['users'] ?? array()) as $u) {
+        if (is_array($u) && isset($u['username']) && trim((string)$u['username']) !== '') {
+            $users[] = array(
+                'username' => trim((string)$u['username']),
+                'password' => (string)($u['password'] ?? '')
+            );
+        }
+    }
+    return $users;
+}
+
+function efppUsersList() {
+    return efppUsersFromSettings(efppLoadSettings());
+}
+
+function efppRunRaw($cmd) {
+    $output = array();
+    $code = 0;
+    exec($cmd . ' 2>&1', $output, $code);
+    return array('code' => $code, 'output' => trim(implode("\n", $output)));
+}
+
+/**
+ * Writes every user to the Apache password file. Runs as the web (fpp) user,
+ * which owns the plugin config directory, so no sudo is required here.
+ */
+function efppWriteHtpasswd($users) {
+    $users = efppUsersFromSettings(array('users' => $users));
+
+    if (empty($users)) {
+        if (file_exists(EFPP_HTPASSWD_FILE)) {
+            @unlink(EFPP_HTPASSWD_FILE);
+        }
+        return array(true, 'Removed password file (no users configured)');
+    }
+
+    $which = efppRunRaw('command -v htpasswd');
+    $htpasswd = ($which['code'] === 0 && trim($which['output']) !== '') ? trim($which['output']) : '';
+
+    if ($htpasswd === '') {
+        $content = '';
+        foreach ($users as $u) {
+            $content .= $u['username'] . ':{SHA}' . base64_encode(sha1($u['password'], true)) . "\n";
+        }
+        if (@file_put_contents(EFPP_HTPASSWD_FILE, $content) === false) {
+            return array(false, 'Could not write the password file to ' . EFPP_HTPASSWD_FILE);
+        }
+        return array(true, 'Password file written for ' . count($users) . ' user(s) using {SHA} fallback');
+    }
+
+    @unlink(EFPP_HTPASSWD_FILE);
+    $first = true;
+    $failed = array();
+    foreach ($users as $u) {
+        $r = efppRunRaw($htpasswd . ' -b -B ' . ($first ? '-c ' : '') . escapeshellarg(EFPP_HTPASSWD_FILE) . ' '
+            . escapeshellarg($u['username']) . ' ' . escapeshellarg($u['password']));
+        if ($r['code'] !== 0) {
+            $failed[] = $u['username'];
+        }
+        $first = false;
+    }
+
+    if (empty($failed) && file_exists(EFPP_HTPASSWD_FILE)) {
+        return array(true, 'Password file written for ' . count($users) . ' user(s) using bcrypt');
+    }
+
+    @unlink(EFPP_HTPASSWD_FILE);
+    return array(false, 'Could not write the password file. htpasswd failed for: ' . implode(', ', $failed));
+}
+
+function efppValidateLoginUser($username, $password, $confirm, $checkUnique, $existingUsers) {
+    $errors = array();
+    $username = trim((string)$username);
+
+    if ($username === '') {
+        $errors[] = 'Username is required.';
+    } elseif (strpos($username, ':') !== false) {
+        $errors[] = 'Username cannot contain a colon (:).';
+    }
+
+    $password = (string)$password;
+    if (strlen($password) < 6) {
+        $errors[] = 'Password must be at least 6 characters long.';
+    }
+    if ($password !== (string)$confirm) {
+        $errors[] = 'Password and confirmation do not match.';
+    }
+
+    if ($checkUnique && $username !== '') {
+        foreach ($existingUsers as $u) {
+            if (strcasecmp($u['username'], $username) === 0) {
+                $errors[] = 'A user with that username already exists.';
+                break;
+            }
+        }
+    }
+
+    return $errors;
 }
 
 function efppRunApply() {
@@ -271,13 +378,18 @@ function efppStatusData() {
     $s = efppLoadSettings();
     $port = (int)$s['port'];
     $backendPort = (int)$s['backend_port'];
+    $users = efppUsersFromSettings($s);
+    $usernames = array();
+    foreach ($users as $u) {
+        $usernames[] = $u['username'];
+    }
     return array(
         'configured' => file_exists(EFPP_SETTINGS_FILE) ? 1 : 0,
         'enabled' => !empty($s['enabled']) ? 1 : 0,
         'port' => $port,
         'backend_port' => $backendPort,
-        'username' => $s['username'],
-        'has_password' => !empty($s['password']) ? 1 : 0,
+        'users' => $usernames,
+        'user_count' => count($usernames),
         'apache_conf_enabled' => file_exists(EFPP_APACHE_CONF_ENABLED) ? 1 : 0,
         'htpasswd_exists' => file_exists(EFPP_HTPASSWD_FILE) ? 1 : 0,
         'login_page' => file_exists(EFPP_LOGIN_PAGE_FILE) ? 1 : 0,
@@ -313,29 +425,6 @@ function efppValidateData($data, $existing) {
 
     if ($port === $backendPort) {
         $errors[] = 'The listen port and the backend (FPP web) port must be different.';
-    }
-
-    if (array_key_exists('username', $data)) {
-        $username = trim((string)$data['username']);
-        if (strpos($username, ':') !== false) {
-            $errors[] = 'Username cannot contain a colon (:).';
-        }
-        $clean['username'] = $username;
-    }
-
-    if (array_key_exists('password', $data) && $data['password'] !== '') {
-        $pw = (string)$data['password'];
-        if (strlen($pw) < 6) {
-            $errors[] = 'Password must be at least 6 characters long.';
-        }
-        if ($pw !== (string)($data['password_confirm'] ?? '')) {
-            $errors[] = 'Password and confirmation do not match.';
-        }
-        $clean['password'] = $pw;
-    }
-
-    if ($clean['enabled'] && ($clean['username'] === '' || $clean['password'] === '')) {
-        $errors[] = 'You must set both a username and a password before enabling the plugin.';
     }
 
     return array($clean, $errors);
@@ -378,12 +467,14 @@ function efppSetEnabled($enabled) {
     $s['enabled'] = $enabled ? 1 : 0;
 
     $errors = array();
-    if ($enabled && ($s['username'] === '' || $s['password'] === '')) {
-        $errors[] = 'Set a username and password in the Config tab before enabling the plugin.';
-        return json(array('success' => false, 'messages' => array(), 'errors' => $errors));
+    if ($enabled && empty(efppUsersFromSettings($s))) {
+        $errors[] = 'Create at least one user in the Users tab before enabling the plugin.';
     }
     if ($enabled && ((int)$s['port'] < 1 || (int)$s['port'] > 65535 || (int)$s['port'] === (int)$s['backend_port'])) {
         $errors[] = 'Configure a valid listen port in the Config tab before enabling the plugin.';
+    }
+
+    if (!empty($errors)) {
         return json(array('success' => false, 'messages' => array(), 'errors' => $errors));
     }
 
@@ -414,6 +505,8 @@ function efppTestEndpoint() {
     $s = efppLoadSettings();
     $port = (int)$s['port'];
     $backendPort = (int)$s['backend_port'];
+    $users = efppUsersFromSettings($s);
+    $testUser = !empty($users) ? $users[0] : null;
 
     if (!empty($s['enabled']) === false) {
         return json(array('success' => false, 'errors' => array('The plugin is not enabled. Enable it first, then test.')));
@@ -428,7 +521,7 @@ function efppTestEndpoint() {
         if (!$r['ok']) $allOk = false;
     }
 
-    if ($allOk && $s['username'] !== '' && $s['password'] !== '') {
+    if ($allOk && $testUser !== null && $testUser['username'] !== '' && $testUser['password'] !== '') {
         $noAuth = efppHttpRequest('GET', '127.0.0.1', $port, '/');
         $authRequired = ($noAuth['code'] === 302 || $noAuth['code'] === 401);
         $results[] = array(
@@ -436,7 +529,7 @@ function efppTestEndpoint() {
             'ok' => $authRequired ? 1 : 0,
             'detail' => 'HTTP ' . $noAuth['code']
         );
-        $loginCode = efppFormLoginTest('127.0.0.1', $port, $s['username'], $s['password']);
+        $loginCode = efppFormLoginTest('127.0.0.1', $port, $testUser['username'], $testUser['password']);
         $ok = $loginCode >= 200 && $loginCode < 400;
         $results[] = array(
             'check' => 'Valid username/password reaches the UI',
@@ -446,12 +539,132 @@ function efppTestEndpoint() {
         if (!$authRequired) $allOk = false;
         if (!$ok) $allOk = false;
     } else {
-        $results[] = array('check' => 'Credentials configured', 'ok' => 0, 'detail' => 'username/password missing');
+        $results[] = array('check' => 'Users configured', 'ok' => $testUser !== null ? 1 : 0, 'detail' => $testUser !== null ? '' : 'no users configured');
         $allOk = false;
     }
 
     efppLog('Test completed: ' . ($allOk ? 'OK' : 'FAILED'));
     return json(array('success' => $allOk, 'results' => $results));
+}
+
+function efppUsersEndpoint() {
+    $s = efppLoadSettings();
+    $users = efppUsersFromSettings($s);
+    $usernames = array();
+    foreach ($users as $u) {
+        $usernames[] = $u['username'];
+    }
+    return json(array('success' => true, 'users' => $usernames, 'enabled' => !empty($s['enabled']) ? 1 : 0));
+}
+
+function efppRequestData() {
+    $data = $_POST;
+    if (empty($data)) {
+        $raw = json_decode(file_get_contents('php://input'), true);
+        if (is_array($raw)) $data = $raw;
+    }
+    return $data;
+}
+
+function efppAddUserEndpoint() {
+    $data = efppRequestData();
+    $username = trim((string)($data['username'] ?? ''));
+    $password = (string)($data['password'] ?? '');
+    $confirm = (string)($data['password_confirm'] ?? '');
+
+    $users = efppUsersList();
+    $errors = efppValidateLoginUser($username, $password, $confirm, true, $users);
+    if (!empty($errors)) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => $errors));
+    }
+
+    $users[] = array('username' => $username, 'password' => $password);
+    if (efppSaveSettingsFile(array_merge(efppLoadSettings(), array('users' => $users))) === false) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('Could not write the settings file. Check file permissions.')));
+    }
+
+    list($ok, $msg) = efppWriteHtpasswd($users);
+    efppLog('User added: ' . $username);
+
+    $usernames = array();
+    foreach ($users as $u) $usernames[] = $u['username'];
+    return json(array('success' => $ok, 'messages' => array($msg), 'errors' => $ok ? array() : array($msg), 'users' => $usernames));
+}
+
+function efppSetPasswordEndpoint() {
+    $data = efppRequestData();
+    $username = trim((string)($data['username'] ?? ''));
+    $password = (string)($data['password'] ?? '');
+    $confirm = (string)($data['password_confirm'] ?? '');
+
+    $users = efppUsersList();
+    $found = false;
+    foreach ($users as $u) {
+        if (strcasecmp($u['username'], $username) === 0) {
+            $found = true;
+            break;
+        }
+    }
+    $errors = efppValidateLoginUser($username, $password, $confirm, false, $users);
+    if (!$found) {
+        $errors[] = 'User not found: ' . $username;
+    }
+    if (!empty($errors)) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => $errors));
+    }
+
+    foreach ($users as $i => $u) {
+        if (strcasecmp($u['username'], $username) === 0) {
+            $users[$i]['password'] = $password;
+            break;
+        }
+    }
+    if (efppSaveSettingsFile(array_merge(efppLoadSettings(), array('users' => $users))) === false) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('Could not write the settings file. Check file permissions.')));
+    }
+
+    list($ok, $msg) = efppWriteHtpasswd($users);
+    efppLog('Password changed for user: ' . $username);
+
+    $usernames = array();
+    foreach ($users as $u) $usernames[] = $u['username'];
+    return json(array('success' => $ok, 'messages' => array($msg), 'errors' => $ok ? array() : array($msg), 'users' => $usernames));
+}
+
+function efppDeleteUserEndpoint() {
+    $data = efppRequestData();
+    $username = trim((string)($data['username'] ?? ''));
+
+    $s = efppLoadSettings();
+    $enabled = !empty($s['enabled']);
+    $users = efppUsersFromSettings($s);
+
+    $found = false;
+    $kept = array();
+    foreach ($users as $u) {
+        if (strcasecmp($u['username'], $username) === 0) {
+            $found = true;
+        } else {
+            $kept[] = $u;
+        }
+    }
+    if (!$found) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('User not found.')));
+    }
+    if ($enabled && count($users) <= 1) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('Cannot delete the last user while the plugin is enabled. Disable the plugin first.')));
+    }
+
+    if (efppSaveSettingsFile(array_merge($s, array('users' => $kept))) === false) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('Could not write the settings file. Check file permissions.')));
+    }
+
+    list($ok, $msg) = efppWriteHtpasswd($kept);
+    efppLog('User deleted: ' . $username);
+
+    $usernames = array();
+    foreach ($kept as $u) $usernames[] = $u['username'];
+    return json(array('success' => $ok, 'messages' => array($msg), 'errors' => $ok ? array() : array($msg), 'users' => $usernames));
 }
 
 function efppLogsEndpoint() {
@@ -526,6 +739,10 @@ function getEndpointsfppExternalFPP() {
     $result[] = array('method' => 'POST', 'endpoint' => 'stop', 'callback' => 'efppStopEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'restart', 'callback' => 'efppRestartEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'test', 'callback' => 'efppTestEndpoint');
+    $result[] = array('method' => 'GET', 'endpoint' => 'users', 'callback' => 'efppUsersEndpoint');
+    $result[] = array('method' => 'POST', 'endpoint' => 'add-user', 'callback' => 'efppAddUserEndpoint');
+    $result[] = array('method' => 'POST', 'endpoint' => 'set-user-password', 'callback' => 'efppSetPasswordEndpoint');
+    $result[] = array('method' => 'POST', 'endpoint' => 'delete-user', 'callback' => 'efppDeleteUserEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'logs', 'callback' => 'efppLogsEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'icon', 'callback' => 'efppIconEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'login-page', 'callback' => 'efppLoginPageEndpoint');

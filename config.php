@@ -16,16 +16,12 @@ $settingsFile = $pluginDir . '/config/settings.json';
 $enabled = 0;
 $port = 8080;
 $backendPort = 80;
-$username = '';
-$hasPassword = false;
 if (file_exists($settingsFile)) {
     $s = json_decode(file_get_contents($settingsFile), true);
     if (is_array($s)) {
         $enabled = !empty($s['enabled']) ? 1 : 0;
         $port = (int)($s['port'] ?? 8080);
         $backendPort = (int)($s['backend_port'] ?? 80);
-        $username = $s['username'] ?? '';
-        $hasPassword = !empty($s['password']);
     }
 }
 ?>
@@ -38,7 +34,8 @@ if (file_exists($settingsFile)) {
         <div class="p-3">
             <p>
                 This plugin opens an additional TCP port that serves the FPP web UI behind a
-                <b>username and password</b>. The normal FPP UI (port 80) is not changed.
+                <b>login page</b>. The normal FPP UI (port 80) is not changed. Configure
+                <b>who can log in</b> in the <b>Users</b> tab.
             </p>
             <table>
                 <tr>
@@ -74,37 +71,6 @@ if (file_exists($settingsFile)) {
                         <input type="number" id="efpp_backend_port" min="1" max="65535" size="8"
                                value="<?php echo htmlspecialchars($backendPort); ?>">
                         <i>(normally 80, only change if FPP's UI is served on another port)</i>
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 4px;"><b>Username:</b></td>
-                    <td style="padding: 4px;">
-                        <input type="text" id="efpp_username" size="30" autocomplete="off"
-                               value="<?php echo htmlspecialchars($username); ?>">
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 4px;"><b>Password:</b></td>
-                    <td style="padding: 4px;">
-                        <input type="password" id="efpp_password" size="30" autocomplete="new-password"
-                               placeholder="Leave blank to keep the current password">
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 4px;"><b>Confirm password:</b></td>
-                    <td style="padding: 4px;">
-                        <input type="password" id="efpp_password_confirm" size="30" autocomplete="new-password"
-                               placeholder="Repeat the new password">
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 4px;"><b>Password configured:</b></td>
-                    <td style="padding: 4px;" id="efpp_has_password">
-                        <?php if ($hasPassword): ?>
-                            <span class="text-success">Yes</span>
-                        <?php else: ?>
-                            <span class="text-danger">No</span>
-                        <?php endif; ?>
                     </td>
                 </tr>
                 <tr>
@@ -187,9 +153,6 @@ var efpp = {
             ? '<span class="text-success">&#9679; Enabled</span>'
             : '<span class="text-danger">&#9679; Disabled</span>');
         $('#efpp_toggle').html(efpp.enabled ? 'Disable External Access' : 'Enable External Access');
-        $('#efpp_has_password').html(s.has_password
-            ? '<span class="text-success">Yes</span>'
-            : '<span class="text-danger">No</span>');
         $('#efpp_url_cell').html(efpp.enabled
             ? '<a href="' + url + '" target="_blank">' + url + '</a>'
             : '<span class="text-secondary">Enabled to see URL</span>');
@@ -241,10 +204,7 @@ var efpp = {
             contentType: 'application/json',
             data: JSON.stringify({
                 port: $('#efpp_port').val(),
-                backend_port: $('#efpp_backend_port').val(),
-                username: $('#efpp_username').val(),
-                password: $('#efpp_password').val(),
-                password_confirm: $('#efpp_password_confirm').val()
+                backend_port: $('#efpp_backend_port').val()
             }),
             dataType: 'json',
             success: function(data) {

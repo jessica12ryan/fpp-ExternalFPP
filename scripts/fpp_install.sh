@@ -59,8 +59,7 @@ if [ ! -f "${PLUGIN_DIR}/config/settings.json" ]; then
   "enabled": 0,
   "port": 8080,
   "backend_port": 80,
-  "username": "",
-  "password": ""
+  "users": []
 }
 EOF
 fi
@@ -90,4 +89,4 @@ fi
 "${PHPRUN}" "${PLUGIN_DIR}/scripts/apply.php" >/dev/null 2>&1 || true
 
 echo "${PLUGIN_NAME}: Plugin installed successfully."
-echo "${PLUGIN_NAME}: Go to Content Setup -> External FPP to configure the port, username, and password."
+echo "${PLUGIN_NAME}: Go to Content Setup -> External FPP to configure the port, then add a user in the Users tab."

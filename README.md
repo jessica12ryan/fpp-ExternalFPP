@@ -15,7 +15,7 @@ It is implemented as a second Apache virtual host on FPP's *existing* web server
 
 - FPP 8+ (uses FPP's built-in Apache 2 web server)
 - Apache modules `mod_proxy`, `mod_proxy_http`, `mod_auth_form`, `mod_session`,
-  `mod_session_cookie`, `mod_authn_file`, `mod_alias` (enabled automatically by the
+  `mod_session_cookie`, `mod_request`, `mod_authn_file`, `mod_alias` (enabled automatically by the
   plugin install script)
 - The FPP web UI reachable on its normal port (default `80`)
 
@@ -44,9 +44,9 @@ sudo bash scripts/fpp_install.sh
 ## Configuration
 
 1. Go to **Content Setup -> External FPP**
-2. Set the **Listen Port** (default `8080`) that will serve the protected UI
-3. Enter a **Username** and **Password**
-4. Click **Save & Apply**
+2. Add at least one **user** (username + password) in the **Users** tab
+3. Set the **Listen Port** (default `8080`) that will serve the protected UI in the **Config** tab
+4. Click **Save & Apply**, then click the **Enable External Access** toggle button
 
 Once enabled you can browse to:
 
@@ -54,8 +54,10 @@ Once enabled you can browse to:
 http://<fpp-ip>:8080/
 ```
 
-You are shown a **login page**. Enter the configured username/password to reach the FPP
-web UI. Requests without a valid session are redirected back to the login page.
+You are shown a **login page**. Enter any configured username/password to reach the FPP
+web UI. Requests without a valid session are redirected back to the login page. The
+plugin requires at least one user: you cannot enable it with zero users, and while it is
+enabled the last user cannot be deleted.
 
 ## Customizing the login page
 

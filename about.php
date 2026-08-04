@@ -30,18 +30,21 @@ $pluginDir = __DIR__;
                 <h4>Features</h4>
                 <ul>
                     <li>Reverse-proxies FPP's web UI to an additional TCP port of your choice</li>
-                    <li>Protects that port with HTTP Basic Auth (username + password)</li>
+                    <li>Protects that port with a username + password login page (form login)</li>
                     <li>Uses FPP's existing Apache web server &mdash; no extra packages or daemons</li>
                     <li>Survives reboots (the extra port comes up at boot)</li>
                     <li>Password hashes written with bcrypt when available</li>
+                    <li>Supports multiple users (add / delete / change password from the UI)</li>
                     <li>One-click enable / disable / test from the UI</li>
                 </ul>
 
                 <h4>How It Works</h4>
                 <ol>
                     <li>The plugin writes an Apache virtual host that listens on the extra port</li>
-                    <li>Every request is checked against the configured username/password
-                        (<code>mod_auth_basic</code> + a local <code>.htpasswd</code> file)</li>
+                    <li>Anonymous requests are sent to a login page; on a successful login Apache
+                        sets a session cookie and proxies the request to FPP</li>
+                    <li>Every login is checked against the configured users
+                        (<code>mod_auth_form</code> + a local <code>.htpasswd</code> file)</li>
                     <li>Authenticated requests are reverse-proxied to the normal FPP web server
                         on <code>127.0.0.1:80</code></li>
                     <li>The <code>Host</code> header is preserved so cookies and sessions work as expected</li>

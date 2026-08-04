@@ -18,6 +18,7 @@ function efpp_tab_active($page) {
 $efpp_tabs = Array(
 	Array('page' => 'status.php',    'icon' => '&#9632;',  'label' => 'Status'),
 	Array('page' => 'config.php',    'icon' => '&#9881;',  'label' => 'Config'),
+	Array('page' => 'users.php',     'icon' => '&#128101;', 'label' => 'Users'),
 	Array('page' => 'loginpage.php', 'icon' => '&#128274;', 'label' => 'Login Page'),
 	Array('page' => 'logs.php',      'icon' => '&#9776;',  'label' => 'Logs'),
 	Array('page' => 'help.php',      'icon' => '&#63;',    'label' => 'Help'),
