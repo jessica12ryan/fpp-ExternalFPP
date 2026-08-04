@@ -247,6 +247,46 @@ function efppReloadApache() {
     return array(false, 'Apache reload failed: ' . $r['output'] . ' ' . $r2['output']);
 }
 
+function efppModuleEnabled($name) {
+    return file_exists('/etc/apache2/mods-enabled/' . $name . '.load')
+        || file_exists('/etc/apache2/mods-enabled/' . $name . '.conf');
+}
+
+function efppEnableModules() {
+    // mod_auth_form needs mod_request to work, otherwise Apache fails to start
+    // (AH02618) even though 'apachectl configtest' passes.
+    $required = array('proxy', 'proxy_http', 'headers', 'authn_file', 'auth_form', 'session', 'session_cookie', 'request', 'alias');
+    $missing = array();
+    foreach ($required as $m) {
+        efppRun('a2enmod ' . $m . ' >/dev/null 2>&1');
+        if (!efppModuleEnabled($m)) {
+            $missing[] = $m;
+        }
+    }
+    return $missing;
+}
+
+function efppPortListening($port) {
+    $port = (int)$port;
+    if ($port < 1 || $port > 65535) {
+        return false;
+    }
+    $fp = @fsockopen('127.0.0.1', $port, $errno, $errstr, 2);
+    if ($fp) {
+        fclose($fp);
+        return true;
+    }
+    return false;
+}
+
+function efppApacheHealthy($port) {
+    $r = efppRun('systemctl is-active apache2');
+    if ($r['code'] !== 0 || strtolower(trim($r['output'])) !== 'active') {
+        return false;
+    }
+    return efppPortListening($port);
+}
+
 function efppApply() {
     $errors = array();
     $messages = array();
@@ -262,7 +302,13 @@ function efppApply() {
     efppEnsureLoginPage();
 
     // Always make sure the required Apache modules are present (idempotent).
-    efppRun('a2enmod proxy proxy_http headers auth_basic authn_file auth_form session session_cookie alias >/dev/null 2>&1');
+    $missingMods = efppEnableModules();
+    if (!empty($missingMods)) {
+        $msg = 'Required Apache modules could not be enabled: ' . implode(', ', $missingMods) . '.';
+        efppLog('ERROR: ' . $msg);
+        efppRun('a2disconf ' . APACHE_CONF_NAME . ' >/dev/null 2>&1');
+        return array('success' => false, 'errors' => array($msg), 'messages' => $messages);
+    }
 
     if ($port < 1 || $port > 65535) {
         $errors[] = 'Invalid listen port "' . htmlspecialchars((string)$s['port'], ENT_QUOTES) . '". Choose a value between 1 and 65535.';
@@ -321,7 +367,17 @@ function efppApply() {
 
         list($ok2, $err2) = efppReloadApache();
         if (!$ok2) {
-            $msg = $err2 . ' The external port may not be active until Apache is reloaded.';
+            // A reload that kills Apache must never leave the FPP web UI down.
+            efppRun('a2disconf ' . APACHE_CONF_NAME . ' >/dev/null 2>&1');
+            efppRun('systemctl restart apache2 >/dev/null 2>&1');
+            $msg = $err2 . ' The external port was disabled and Apache restarted.';
+            efppLog('ERROR: ' . $msg);
+            return array('success' => false, 'errors' => array($msg), 'messages' => $messages);
+        }
+        if (!efppApacheHealthy($port)) {
+            efppRun('a2disconf ' . APACHE_CONF_NAME . ' >/dev/null 2>&1');
+            efppRun('systemctl restart apache2 >/dev/null 2>&1');
+            $msg = 'Apache did not come back healthy after applying the external port configuration. The external port was disabled and Apache restarted.';
             efppLog('ERROR: ' . $msg);
             return array('success' => false, 'errors' => array($msg), 'messages' => $messages);
         }
