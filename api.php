@@ -121,6 +121,15 @@ function efppHttpStatus($host, $port, $path = '/', $user = null, $pass = null) {
     return array('code' => $code, 'body' => $resp);
 }
 
+function efppFppUiPasswordEnabled() {
+    $conf = '/home/fpp/media/config/ui-password-config.conf';
+    if (!file_exists($conf)) {
+        return false;
+    }
+    $content = @file_get_contents($conf);
+    return is_string($content) && preg_match('/\bRequire\s+valid-user\b/i', $content);
+}
+
 function efppStatusData() {
     $s = efppLoadSettings();
     $port = (int)$s['port'];
@@ -136,6 +145,7 @@ function efppStatusData() {
         'htpasswd_exists' => file_exists(EFPP_HTPASSWD_FILE) ? 1 : 0,
         'listening' => efppTcpOpen('127.0.0.1', $port) ? 1 : 0,
         'backend_reachable' => efppTcpOpen('127.0.0.1', $backendPort) ? 1 : 0,
+        'fpp_ui_password' => efppFppUiPasswordEnabled() ? 1 : 0,
         'hostname' => php_uname('n')
     );
 }

@@ -136,6 +136,12 @@ function efppBuildApacheConf($port, $backendPort, $htpasswdFile) {
     $lines[] = '    ProxyPassReverse / http://127.0.0.1:' . $backendPort . '/';
     $lines[] = '    ProxyPassReverse / https://127.0.0.1:' . $backendPort . '/';
     $lines[] = '';
+    $lines[] = '    # Never forward the browser\'s credentials to FPP. They are only meant for this';
+    $lines[] = '    # vhost, and forwarding them lets the backend validate (and reject) them against';
+    $lines[] = '    # FPP\'s own password file, which triggers a second Basic Auth challenge';
+    $lines[] = '    # (realm "Falcon Player") and causes browsers to prompt for a password forever.';
+    $lines[] = '    RequestHeader unset Authorization';
+    $lines[] = '';
     $lines[] = '    <Proxy *>';
     $lines[] = '        Require all granted';
     $lines[] = '    </Proxy>';

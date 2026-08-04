@@ -63,6 +63,7 @@ var efppStatus = {
                     ['Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['External port listening', s.listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Backend FPP web reachable', s.backend_reachable ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
+                    ['FPP built-in UI password', s.fpp_ui_password ? '<span class="text-warning">Enabled</span>' : '<span class="text-success">Not set</span>'],
                     ['External URL', s.enabled ? '<a href="' + url + '" target="_blank">' + url + '</a>' : '<span class="text-secondary">-</span>']
                 ];
                 var html = '<table class="fppTable" style="width:auto;">';
@@ -70,6 +71,14 @@ var efppStatus = {
                     html += '<tr><td style="padding:4px;"><b>' + rows[i][0] + ':</b></td><td style="padding:4px;">' + rows[i][1] + '</td></tr>';
                 }
                 html += '</table>';
+                if (s.fpp_ui_password) {
+                    html += '<div class="alert alert-warning" style="margin-top:8px;">' +
+                        '<b>FPP\'s built-in UI password is enabled.</b> FPP normally skips its own password for ' +
+                        'requests that come from the FPP itself (this plugin proxies through the local machine), ' +
+                        'so the extra port usually only asks for the password configured here. If your FPP is ' +
+                        'configured differently, you may also be asked for FPP\'s own admin password (' +
+                        'username <code>admin</code>) on the external port.</div>';
+                }
                 if (!s.enabled && s.configured) {
                     html += '<p class="text-warning" style="margin-top:8px;">The external port is currently disabled. Go to the Config tab to enable it.</p>';
                 }

@@ -100,6 +100,28 @@ sudo tail -50 /home/fpp/media/logs/apache2-externalfpp-error.log</pre>
                 The password may have been changed without re-applying, or the password file may have
                 been overwritten. Re-enter the password in the Config tab and click <b>Save &amp; Apply</b>.
             </p>
+
+            <h4>Logged in, but the browser keeps asking for a password again</h4>
+            <p>
+                This is the classic <b>double Basic Auth</b> symptom. It happens when <b>FPP's built-in
+                UI password</b> (Status/Control &rarr; FPP Settings &rarr; UI tab) is also enabled. FPP's
+                own Apache then adds a second password check (realm <em>"Falcon Player"</em>) on the
+                regular port 80, and the browser cannot satisfy both layers at once, so it prompts
+                repeatedly.
+            </p>
+            <p>
+                On a standard FPP this plugin normally avoids the clash because the extra port
+                proxies through the FPP itself, which FPP exempts from its own password. If you still
+                see the loop, the cleanest fix is to <b>turn off FPP's built-in UI password</b> &mdash;
+                this plugin provides its own password, so FPP's is no longer needed:
+                <b>Status/Control &rarr; FPP Settings &rarr; UI tab &rarr; enable &quot;Enable UI
+                password&quot; = No</b>, then click <b>Save &amp; Apply</b> in this plugin again.
+            </p>
+            <p>
+                Alternatively, when you are prompted a second time on the external port, enter FPP's
+                own admin credentials (username <code>admin</code> and the password you set for FPP's
+                UI) and you should get through.
+            </p>
         </div>
     </fieldset>
 </div>

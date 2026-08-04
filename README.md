@@ -85,6 +85,25 @@ otherwise.
   ```
 - Port already in use? Pick a different **Listen Port** in the plugin config.
 
+### "I logged in but the browser keeps asking for a password again"
+
+This is the classic **double Basic Auth** symptom. FPP has its own built-in **UI Password**
+(Status/Control -> FPP Settings -> UI tab). When it is enabled, FPP's Apache adds a *second*
+password check on port 80 (realm "Falcon Player"). A browser can only cache credentials per
+realm, so it cannot satisfy both layers at once and keeps prompting.
+
+This plugin proxies through the FPP itself, which FPP normally exempts from its own password, so
+on a standard FPP the two passwords do not clash. If you still see the loop:
+
+1. Open the plugin's **Status** tab and check the "FPP built-in UI password" row.
+2. Either turn off FPP's UI password (Status/Control -> FPP Settings -> UI tab -> Enable UI
+   password = No) since this plugin provides its own, or
+3. When prompted a second time on the external port, enter FPP's own admin credentials
+   (username `admin` and the password you set for FPP's UI).
+
+The plugin never forwards your credentials to FPP's web server, so the two layers stay
+independent.
+
 ## Security notes
 
 - Traffic on the additional port is plain HTTP. Do **not** expose it directly to the
