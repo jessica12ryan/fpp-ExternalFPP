@@ -16,6 +16,10 @@ define('EFPP_PLUGIN_DIR', __DIR__);
 define('EFPP_SETTINGS_FILE', EFPP_PLUGIN_DIR . '/config/settings.json');
 define('EFPP_HTPASSWD_FILE', EFPP_PLUGIN_DIR . '/config/plugin.fpp-ExternalFPP.htpasswd');
 define('EFPP_APPLY_SCRIPT', EFPP_PLUGIN_DIR . '/scripts/apply.php');
+define('EFPP_LOGIN_PAGE_DIR', EFPP_PLUGIN_DIR . '/www');
+define('EFPP_LOGIN_PAGE_FILE', EFPP_LOGIN_PAGE_DIR . '/login.html');
+define('EFPP_LOGIN_PAGE_TEMPLATE', EFPP_PLUGIN_DIR . '/templates/login.html');
+define('EFPP_LOGIN_PAGE_URL', '/login.html');
 define('EFPP_APACHE_CONF_NAME', 'fpp-externalfpp');
 define('EFPP_APACHE_CONF_ENABLED', '/etc/apache2/conf-enabled/fpp-externalfpp.conf');
 define('EFPP_LOG_DIR', getenv('LOGDIR') ?: '/home/fpp/media/logs');
@@ -93,18 +97,25 @@ function efppTcpOpen($host, $port) {
     return false;
 }
 
-function efppHttpStatus($host, $port, $path = '/', $user = null, $pass = null) {
+function efppHttpRequest($method, $host, $port, $path, $extraHeaders = array(), $body = '') {
     $port = (int)$port;
     $fp = @fsockopen($host, $port, $errno, $errstr, 3);
     if (!$fp) {
-        return array('code' => 0, 'body' => '');
+        return array('code' => 0, 'headers' => array(), 'body' => '');
     }
-    $req = 'GET ' . $path . " HTTP/1.1\r\n";
+    $req = $method . ' ' . $path . " HTTP/1.1\r\n";
     $req .= 'Host: ' . $host . "\r\n";
-    if ($user !== null) {
-        $req .= 'Authorization: Basic ' . base64_encode($user . ':' . $pass) . "\r\n";
+    foreach ($extraHeaders as $h) {
+        $req .= $h . "\r\n";
+    }
+    if ($body !== '') {
+        $req .= 'Content-Type: application/x-www-form-urlencoded' . "\r\n";
+        $req .= 'Content-Length: ' . strlen($body) . "\r\n";
     }
     $req .= "Connection: close\r\n\r\n";
+    if ($body !== '') {
+        $req .= $body;
+    }
     fwrite($fp, $req);
     $resp = '';
     while (!feof($fp)) {
@@ -114,11 +125,50 @@ function efppHttpStatus($host, $port, $path = '/', $user = null, $pass = null) {
         if (strlen($resp) > 1048576) break;
     }
     fclose($fp);
+
     $code = 0;
     if (preg_match('#^HTTP/\S+\s+(\d{3})#', $resp, $m)) {
         $code = (int)$m[1];
     }
-    return array('code' => $code, 'body' => $resp);
+    $headers = array();
+    $bodyOut = '';
+    $parts = explode("\r\n\r\n", $resp, 2);
+    $headerBlock = $parts[0];
+    if (count($parts) > 1) {
+        $bodyOut = $parts[1];
+    }
+    foreach (preg_split('/\r?\n/', $headerBlock) as $line) {
+        if (strpos($line, ':') !== false) {
+            list($k, $v) = explode(':', $line, 2);
+            $headers[trim($k)] = trim($v);
+        }
+    }
+    return array('code' => $code, 'headers' => $headers, 'body' => $bodyOut);
+}
+
+/**
+ * Performs a form login against the external port the same way a browser would:
+ * POST the httpd_username/httpd_password fields to the protected URL, keep the
+ * session cookie that Apache sets, then request the UI with that cookie.
+ * Returns the HTTP status of the final authenticated request (0 on failure).
+ */
+function efppFormLoginTest($host, $port, $user, $pass) {
+    $post = 'httpd_username=' . rawurlencode($user)
+        . '&httpd_password=' . rawurlencode($pass)
+        . '&httpd_login=Continue';
+    $r = efppHttpRequest('POST', $host, $port, '/', array(), $post);
+    $cookie = '';
+    if (isset($r['headers']['Set-Cookie'])) {
+        $sc = $r['headers']['Set-Cookie'];
+        if (preg_match('/([^=;,\s]+)=([^;,\s]+)/', $sc, $m)) {
+            $cookie = $m[1] . '=' . $m[2];
+        }
+    }
+    if ($cookie === '') {
+        return 0;
+    }
+    $r2 = efppHttpRequest('GET', $host, $port, '/', array('Cookie: ' . $cookie));
+    return $r2['code'];
 }
 
 function efppFppUiPasswordEnabled() {
@@ -128,6 +178,93 @@ function efppFppUiPasswordEnabled() {
     }
     $content = @file_get_contents($conf);
     return is_string($content) && preg_match('/\bRequire\s+valid-user\b/i', $content);
+}
+
+function efppDefaultLoginPage() {
+    if (file_exists(EFPP_LOGIN_PAGE_TEMPLATE)) {
+        $c = @file_get_contents(EFPP_LOGIN_PAGE_TEMPLATE);
+        if (is_string($c) && $c !== '') {
+            return $c;
+        }
+    }
+    return '<!DOCTYPE html><html><body style="font-family:sans-serif;background:#1c1e21;color:#eee;text-align:center;padding:60px;">'
+        . '<h1>External FPP Web Access</h1>'
+        . '<form method="post" action="/">'
+        . '<input type="text" name="httpd_username" placeholder="Username"><br><br>'
+        . '<input type="password" name="httpd_password" placeholder="Password"><br><br>'
+        . '<button type="submit">Sign In</button></form></body></html>';
+}
+
+function efppLoginPageContent() {
+    if (file_exists(EFPP_LOGIN_PAGE_FILE)) {
+        $c = @file_get_contents(EFPP_LOGIN_PAGE_FILE);
+        if (is_string($c)) {
+            return $c;
+        }
+    }
+    return efppDefaultLoginPage();
+}
+
+function efppValidateLoginPage($content) {
+    if ($content === '') {
+        return array(array('The login page cannot be empty.'), array());
+    }
+    $warnings = array();
+    if (!preg_match('/<form\b[^>]*method\s*=\s*["\']?post/i', $content)) {
+        $warnings[] = 'The <form> element is missing method="post". Without it, logins will not work.';
+    }
+    if (!preg_match('/<form\b[^>]*action\s*=/i', $content)) {
+        $warnings[] = 'The <form> element is missing an action. It must post to a protected URL, e.g. action="/".';
+    }
+    if (!preg_match('/name\s*=\s*["\']httpd_username["\']/i', $content)) {
+        $warnings[] = 'The form is missing the required <input name="httpd_username"> field.';
+    }
+    if (!preg_match('/name\s*=\s*["\']httpd_password["\']/i', $content)) {
+        $warnings[] = 'The form is missing the required <input name="httpd_password"> field.';
+    }
+    return array(array(), $warnings);
+}
+
+function efppLoginPageEndpoint() {
+    return json(array('success' => true, 'content' => efppLoginPageContent()));
+}
+
+function efppSaveLoginPageEndpoint() {
+    $data = $_POST;
+    if (empty($data)) {
+        $raw = json_decode(file_get_contents('php://input'), true);
+        if (is_array($raw)) $data = $raw;
+    }
+    $content = $data['content'] ?? null;
+    if (!is_string($content)) {
+        return json(array('success' => false, 'messages' => array(), 'warnings' => array(), 'errors' => array('No page content received.')));
+    }
+
+    list($errors, $warnings) = efppValidateLoginPage($content);
+
+    if (!is_dir(EFPP_LOGIN_PAGE_DIR)) {
+        @mkdir(EFPP_LOGIN_PAGE_DIR, 0775, true);
+    }
+    if (@file_put_contents(EFPP_LOGIN_PAGE_FILE, $content) === false) {
+        $errors[] = 'Could not write the login page to ' . EFPP_LOGIN_PAGE_FILE . '. Check file permissions.';
+    }
+
+    if (!empty($errors)) {
+        return json(array('success' => false, 'messages' => array(), 'warnings' => $warnings, 'errors' => $errors));
+    }
+    efppLog('Login page saved');
+    return json(array('success' => true, 'messages' => array('Login page saved.'), 'warnings' => $warnings, 'errors' => array()));
+}
+
+function efppResetLoginPageEndpoint() {
+    if (!is_dir(EFPP_LOGIN_PAGE_DIR)) {
+        @mkdir(EFPP_LOGIN_PAGE_DIR, 0775, true);
+    }
+    if (@file_put_contents(EFPP_LOGIN_PAGE_FILE, efppDefaultLoginPage()) === false) {
+        return json(array('success' => false, 'messages' => array(), 'warnings' => array(), 'errors' => array('Could not write the login page. Check file permissions.')));
+    }
+    efppLog('Login page reset to default');
+    return json(array('success' => true, 'messages' => array('Login page reset to the default template.'), 'warnings' => array(), 'errors' => array()));
 }
 
 function efppStatusData() {
@@ -143,6 +280,7 @@ function efppStatusData() {
         'has_password' => !empty($s['password']) ? 1 : 0,
         'apache_conf_enabled' => file_exists(EFPP_APACHE_CONF_ENABLED) ? 1 : 0,
         'htpasswd_exists' => file_exists(EFPP_HTPASSWD_FILE) ? 1 : 0,
+        'login_page' => file_exists(EFPP_LOGIN_PAGE_FILE) ? 1 : 0,
         'listening' => efppTcpOpen('127.0.0.1', $port) ? 1 : 0,
         'backend_reachable' => efppTcpOpen('127.0.0.1', $backendPort) ? 1 : 0,
         'fpp_ui_password' => efppFppUiPasswordEnabled() ? 1 : 0,
@@ -286,20 +424,21 @@ function efppTestEndpoint() {
     }
 
     if ($allOk && $s['username'] !== '' && $s['password'] !== '') {
-        $noAuth = efppHttpStatus('127.0.0.1', $port, '/');
+        $noAuth = efppHttpRequest('GET', '127.0.0.1', $port, '/');
+        $authRequired = ($noAuth['code'] === 302 || $noAuth['code'] === 401);
         $results[] = array(
-            'check' => 'No credentials returns 401 (auth required)',
-            'ok' => ($noAuth['code'] === 401) ? 1 : 0,
+            'check' => 'No credentials is sent to the login page',
+            'ok' => $authRequired ? 1 : 0,
             'detail' => 'HTTP ' . $noAuth['code']
         );
-        $withAuth = efppHttpStatus('127.0.0.1', $port, '/', $s['username'], $s['password']);
-        $ok = $withAuth['code'] >= 200 && $withAuth['code'] < 400;
+        $loginCode = efppFormLoginTest('127.0.0.1', $port, $s['username'], $s['password']);
+        $ok = $loginCode >= 200 && $loginCode < 400;
         $results[] = array(
-            'check' => 'Valid credentials can reach the UI',
+            'check' => 'Valid username/password reaches the UI',
             'ok' => $ok ? 1 : 0,
-            'detail' => 'HTTP ' . $withAuth['code']
+            'detail' => 'HTTP ' . $loginCode
         );
-        if ($noAuth['code'] !== 401) $allOk = false;
+        if (!$authRequired) $allOk = false;
         if (!$ok) $allOk = false;
     } else {
         $results[] = array('check' => 'Credentials configured', 'ok' => 0, 'detail' => 'username/password missing');
@@ -384,6 +523,9 @@ function getEndpointsfppExternalFPP() {
     $result[] = array('method' => 'POST', 'endpoint' => 'test', 'callback' => 'efppTestEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'logs', 'callback' => 'efppLogsEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'icon', 'callback' => 'efppIconEndpoint');
+    $result[] = array('method' => 'GET', 'endpoint' => 'login-page', 'callback' => 'efppLoginPageEndpoint');
+    $result[] = array('method' => 'POST', 'endpoint' => 'save-login-page', 'callback' => 'efppSaveLoginPageEndpoint');
+    $result[] = array('method' => 'POST', 'endpoint' => 'reset-login-page', 'callback' => 'efppResetLoginPageEndpoint');
 
     return $result;
 }

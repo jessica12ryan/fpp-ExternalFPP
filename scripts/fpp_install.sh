@@ -24,6 +24,10 @@ fi
 if [ -f "${PLUGIN_DIR}/config/plugin.fpp-ExternalFPP.htpasswd" ]; then
     cp "${PLUGIN_DIR}/config/plugin.fpp-ExternalFPP.htpasswd" "${BACKUP_DIR}/htpasswd" 2>/dev/null || true
 fi
+if [ -f "${PLUGIN_DIR}/www/login.html" ]; then
+    mkdir -p "${BACKUP_DIR}/www"
+    cp "${PLUGIN_DIR}/www/login.html" "${BACKUP_DIR}/www/login.html" 2>/dev/null || true
+fi
 
 # If the plugin is a git clone, update it (best effort)
 if [ -d "${PLUGIN_DIR}/.git" ]; then
@@ -40,6 +44,10 @@ if [ -f "${BACKUP_DIR}/settings.json" ]; then
 fi
 if [ -f "${BACKUP_DIR}/htpasswd" ]; then
     cp "${BACKUP_DIR}/htpasswd" "${PLUGIN_DIR}/config/plugin.fpp-ExternalFPP.htpasswd" 2>/dev/null || true
+fi
+if [ -f "${BACKUP_DIR}/www/login.html" ]; then
+    mkdir -p "${PLUGIN_DIR}/www"
+    cp "${BACKUP_DIR}/www/login.html" "${PLUGIN_DIR}/www/login.html" 2>/dev/null || true
 fi
 rm -rf "${BACKUP_DIR}"
 
@@ -61,6 +69,11 @@ fi
 if chown -R fpp:fpp "${PLUGIN_DIR}/config" 2>/dev/null || chown -R :fpp "${PLUGIN_DIR}/config" 2>/dev/null; then
     chmod 775 "${PLUGIN_DIR}/config" 2>/dev/null || true
     find "${PLUGIN_DIR}/config" -type f -exec chmod 664 {} + 2>/dev/null || true
+fi
+if [ -d "${PLUGIN_DIR}/www" ]; then
+    chown -R fpp:fpp "${PLUGIN_DIR}/www" 2>/dev/null || chown -R :fpp "${PLUGIN_DIR}/www" 2>/dev/null || true
+    chmod 775 "${PLUGIN_DIR}/www" 2>/dev/null || true
+    find "${PLUGIN_DIR}/www" -type f -exec chmod 664 {} + 2>/dev/null || true
 fi
 
 # Make sure helper scripts are executable

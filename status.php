@@ -61,6 +61,7 @@ var efppStatus = {
                     ['Password configured', s.has_password ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Apache vhost enabled', s.apache_conf_enabled ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
+                    ['Custom login page', s.login_page ? '<span class="text-success">Yes</span>' : '<span class="text-warning">No (default)</span>'],
                     ['External port listening', s.listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Backend FPP web reachable', s.backend_reachable ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['FPP built-in UI password', s.fpp_ui_password ? '<span class="text-warning">Enabled</span>' : '<span class="text-success">Not set</span>'],
@@ -75,9 +76,9 @@ var efppStatus = {
                     html += '<div class="alert alert-warning" style="margin-top:8px;">' +
                         '<b>FPP\'s built-in UI password is enabled.</b> FPP normally skips its own password for ' +
                         'requests that come from the FPP itself (this plugin proxies through the local machine), ' +
-                        'so the extra port usually only asks for the password configured here. If your FPP is ' +
-                        'configured differently, you may also be asked for FPP\'s own admin password (' +
-                        'username <code>admin</code>) on the external port.</div>';
+                        'so the extra port usually only asks for the password configured here (via the login page). ' +
+                        'If your FPP is configured differently, you may also be asked for FPP\'s own admin password ' +
+                        '(username <code>admin</code>) on the external port.</div>';
                 }
                 if (!s.enabled && s.configured) {
                     html += '<p class="text-warning" style="margin-top:8px;">The external port is currently disabled. Go to the Config tab to enable it.</p>';

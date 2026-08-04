@@ -5,5 +5,8 @@
 /config/settings.json
 /config/plugin.fpp-ExternalFPP.htpasswd
 
+# User-editable login page (default template lives in templates/login.html)
+/www/login.html
+
 # Local Apache test output
 /etc/

@@ -2,7 +2,7 @@
 	"repoName": "fpp-ExternalFPP",
 	"name": "External FPP Web Access",
 	"author": "jessica12ryan",
-	"description": "Opens an additional TCP port on your FPP that serves the FPP web UI behind a username and password (HTTP Basic Auth). Uses FPP's built-in Apache web server as a reverse proxy, so no extra packages are required. Ideal for safely exposing the FPP UI to guest or remote networks without touching the normal local UI.",
+	"description": "Opens an additional TCP port on your FPP that serves the FPP web UI behind a customizable login page (username and password). Uses FPP's built-in Apache web server as a reverse proxy, so no extra packages are required. Ideal for safely exposing the FPP UI to guest or remote networks without touching the normal local UI.",
 	"homeURL": "https://github.com/jessica12ryan/fpp-ExternalFPP",
 	"srcURL": "https://github.com/jessica12ryan/fpp-ExternalFPP.git",
 	"bugURL": "https://github.com/jessica12ryan/fpp-ExternalFPP/issues",

@@ -20,6 +20,12 @@ $menuEntries = Array(
 		'wrap' => 1
 	),
 	Array(
+		'text' => '<img src="' . $efppIconUrl . '" width="16" height="16" class="align-middle me-1"> External FPP Login Page',
+		'type' => 'content',
+		'page' => 'loginpage.php',
+		'wrap' => 1
+	),
+	Array(
 		'text' => '<img src="' . $efppIconUrl . '" width="16" height="16" class="align-middle me-1"> External FPP',
 		'type' => 'status',
 		'page' => 'status.php',

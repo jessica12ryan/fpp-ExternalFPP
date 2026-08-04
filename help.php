@@ -43,10 +43,26 @@ $pluginDir = __DIR__;
 
             <h3>Accessing the Protected UI</h3>
             <p>
-                When you open the extra port, the browser shows a login dialog.
-                Enter the configured username/password to reach the FPP web UI.
-                Requests without valid credentials are answered with
-                <code>401 Unauthorized</code>.
+                When you open the extra port you are taken to a <b>login page</b> (a sign-in
+                form styled like FPP). Enter the configured username/password to reach the
+                FPP web UI. Requests without a valid session are redirected back to the
+                login page.
+            </p>
+
+            <hr>
+
+            <h3>Customizing the Login Page</h3>
+            <p>
+                Open the <b>Login Page</b> tab to edit the HTML of the login page and to see
+                the code that is required for logging in to work (the
+                <code>&lt;form method="post"&gt;</code> and the <code>httpd_username</code> /
+                <code>httpd_password</code> fields). The page is stored in the plugin's
+                <code>www/login.html</code> file and is read by Apache on every request, so
+                changes take effect as soon as you save them.
+            </p>
+            <p>
+                To sign out, visit <code>/logout</code> in the browser (this removes the session
+                cookie and returns you to the login page).
             </p>
 
             <hr>
@@ -61,13 +77,14 @@ $pluginDir = __DIR__;
 
             <h3>Security Considerations</h3>
             <ul>
-                <li>The extra port uses <b>plain HTTP</b> with HTTP Basic Auth. Do not expose it
-                    directly to the public internet. Put it behind a VPN or a TLS reverse proxy
-                    for remote access.</li>
-                <li>Basic Auth credentials are sent Base64-encoded, not encrypted.</li>
+                <li>The extra port uses <b>plain HTTP</b>. The login password is submitted as
+                    plain form data, and the session is tracked with a cookie that stores the
+                    login details in a reversible form. Both can be read by anyone on the
+                    network. Do not expose this port to the public internet &mdash; put it
+                    behind a VPN or a TLS reverse proxy for remote access.</li>
                 <li>If FPP's built-in <b>UI Password</b> is also configured, requests through this
-                    port may be challenged by that password too, depending on FPP's Apache auth
-                    configuration.</li>
+                    port may additionally be challenged by that password, depending on FPP's Apache
+                    auth configuration.</li>
             </ul>
 
             <hr>
@@ -95,24 +112,27 @@ sudo tail -50 /home/fpp/media/logs/apache2-externalfpp-error.log</pre>
                 (normally <code>80</code>).
             </p>
 
-            <h4>Getting 401 even with the right password</h4>
+            <h4>Getting sent back to the login page even with the right password</h4>
             <p>
                 The password may have been changed without re-applying, or the password file may have
                 been overwritten. Re-enter the password in the Config tab and click <b>Save &amp; Apply</b>.
+                Also check the <b>Login Page</b> tab: if the saved page is missing the required
+                <code>httpd_username</code> / <code>httpd_password</code> form fields, logging in
+                cannot work.
             </p>
 
-            <h4>Logged in, but the browser keeps asking for a password again</h4>
+            <h4>Asked for a password again after logging in</h4>
             <p>
-                This is the classic <b>double Basic Auth</b> symptom. It happens when <b>FPP's built-in
-                UI password</b> (Status/Control &rarr; FPP Settings &rarr; UI tab) is also enabled. FPP's
-                own Apache then adds a second password check (realm <em>"Falcon Player"</em>) on the
-                regular port 80, and the browser cannot satisfy both layers at once, so it prompts
-                repeatedly.
+                The plugin now uses a <b>login page + session cookie</b> instead of HTTP Basic Auth,
+                so the old &quot;prompts forever&quot; loop is gone. If you are still prompted for a
+                password after signing in, it is <b>FPP's built-in UI password</b> (Status/Control
+                &rarr; FPP Settings &rarr; UI tab). FPP's own Apache adds that check on the regular
+                port 80, and the prompt appears through the proxied pages too.
             </p>
             <p>
                 On a standard FPP this plugin normally avoids the clash because the extra port
                 proxies through the FPP itself, which FPP exempts from its own password. If you still
-                see the loop, the cleanest fix is to <b>turn off FPP's built-in UI password</b> &mdash;
+                see the prompt, the cleanest fix is to <b>turn off FPP's built-in UI password</b> &mdash;
                 this plugin provides its own password, so FPP's is no longer needed:
                 <b>Status/Control &rarr; FPP Settings &rarr; UI tab &rarr; enable &quot;Enable UI
                 password&quot; = No</b>, then click <b>Save &amp; Apply</b> in this plugin again.
