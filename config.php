@@ -43,7 +43,7 @@ if (file_exists($settingsFile)) {
             <table>
                 <tr>
                     <td style="padding: 4px;"><b>Status:</b></td>
-                    <td style="padding: 4px;">
+                    <td style="padding: 4px;" id="efpp_status_text">
                         <?php if ($enabled): ?>
                             <span class="text-success">&#9679; Enabled</span>
                         <?php else: ?>
@@ -52,12 +52,12 @@ if (file_exists($settingsFile)) {
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding: 4px;"><b>Enable external access:</b></td>
+                    <td style="padding: 4px;"><b>External access:</b></td>
                     <td style="padding: 4px;">
-                        <select id="efpp_enabled">
-                            <option value="0"<?php echo $enabled ? '' : ' selected'; ?>>Disabled</option>
-                            <option value="1"<?php echo $enabled ? ' selected' : ''; ?>>Enabled</option>
-                        </select>
+                        <button type="button" id="efpp_toggle" class="buttons" onclick="efpp.toggle();">
+                            <?php echo $enabled ? 'Disable External Access' : 'Enable External Access'; ?>
+                        </button>
+                        <i>(turns the password-protected port on/off without changing the settings below)</i>
                     </td>
                 </tr>
                 <tr>
@@ -99,7 +99,7 @@ if (file_exists($settingsFile)) {
                 </tr>
                 <tr>
                     <td style="padding: 4px;"><b>Password configured:</b></td>
-                    <td style="padding: 4px;">
+                    <td style="padding: 4px;" id="efpp_has_password">
                         <?php if ($hasPassword): ?>
                             <span class="text-success">Yes</span>
                         <?php else: ?>
@@ -112,7 +112,6 @@ if (file_exists($settingsFile)) {
                     <td style="padding: 4px;">
                         <input type="button" class="buttons" value="Save &amp; Apply" onclick="efpp.save();">
                         <input type="button" class="buttons" value="Test" onclick="efpp.test();">
-                        <input type="button" class="buttons" value="Disable" onclick="efpp.stop();">
                     </td>
                 </tr>
                 <tr>
@@ -151,6 +150,7 @@ if (file_exists($settingsFile)) {
 <script>
 var efpp = {
     apiBase: 'api/plugin/fpp-ExternalFPP',
+    enabled: false,
 
     showError: function(msg) {
         $('#efpp_result').html('<span class="text-danger">' + msg + '</span>');
@@ -174,13 +174,63 @@ var efpp = {
         $('#efpp_result').html(html);
         if (data.settings) {
             efpp.renderStatus(data.settings);
+        } else {
+            efpp.refreshStatus();
         }
     },
 
     renderStatus: function(s) {
+        efpp.enabled = !!s.enabled;
         var host = window.location.hostname;
         var url = 'http://' + host + ':' + s.port + '/';
-        $('#efpp_url_cell').html(s.enabled ? '<a href="' + url + '" target="_blank">' + url + '</a>' : '<span class="text-secondary">Enabled to see URL</span>');
+        $('#efpp_status_text').html(efpp.enabled
+            ? '<span class="text-success">&#9679; Enabled</span>'
+            : '<span class="text-danger">&#9679; Disabled</span>');
+        $('#efpp_toggle').html(efpp.enabled ? 'Disable External Access' : 'Enable External Access');
+        $('#efpp_has_password').html(s.has_password
+            ? '<span class="text-success">Yes</span>'
+            : '<span class="text-danger">No</span>');
+        $('#efpp_url_cell').html(efpp.enabled
+            ? '<a href="' + url + '" target="_blank">' + url + '</a>'
+            : '<span class="text-secondary">Enabled to see URL</span>');
+    },
+
+    refreshStatus: function() {
+        $.ajax({
+            url: efpp.apiBase + '/status',
+            type: 'GET',
+            dataType: 'json',
+            success: efpp.renderStatus,
+            error: function() {}
+        });
+    },
+
+    toggle: function() {
+        if (efpp.enabled) {
+            if (!confirm('Disable the external (password-protected) port? The normal FPP UI is unaffected.')) {
+                return;
+            }
+            efpp.setEnabled(false);
+        } else {
+            efpp.setEnabled(true);
+        }
+    },
+
+    setEnabled: function(enable) {
+        $('#efpp_result').html('<span class="text-warning">' + (enable ? 'Enabling...' : 'Disabling...') + '</span>');
+        $.ajax({
+            url: efpp.apiBase + (enable ? '/start' : '/stop'),
+            type: 'POST',
+            contentType: 'application/json',
+            data: '{}',
+            dataType: 'json',
+            success: function(data) {
+                efpp.handleResponse(data);
+            },
+            error: function(xhr) {
+                efpp.showError('Could not reach the plugin API. Check the FPP web server logs.');
+            }
+        });
     },
 
     save: function() {
@@ -190,7 +240,6 @@ var efpp = {
             type: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({
-                enabled: $('#efpp_enabled').val(),
                 port: $('#efpp_port').val(),
                 backend_port: $('#efpp_backend_port').val(),
                 username: $('#efpp_username').val(),
@@ -237,26 +286,6 @@ var efpp = {
                 efpp.showError('Could not reach the plugin API. Check the FPP web server logs.');
             }
         });
-    },
-
-    stop: function() {
-        if (!confirm('Disable the external (password-protected) port? The normal FPP UI is unaffected.')) {
-            return;
-        }
-        $('#efpp_result').html('<span class="text-warning">Disabling...</span>');
-        $.ajax({
-            url: efpp.apiBase + '/stop',
-            type: 'POST',
-            contentType: 'application/json',
-            data: '{}',
-            dataType: 'json',
-            success: function(data) {
-                efpp.handleResponse(data);
-            },
-            error: function(xhr) {
-                efpp.showError('Could not reach the plugin API. Check the FPP web server logs.');
-            }
-        });
     }
 };
 
@@ -266,14 +295,8 @@ function escHtml(s) {
 }
 
 $(document).ready(function() {
-    $.ajax({
-        url: efpp.apiBase + '/status',
-        type: 'GET',
-        dataType: 'json',
-        success: function(s) {
-            efpp.renderStatus(s);
-        }
-    });
+    efpp.refreshStatus();
+    setInterval(efpp.refreshStatus, 10000);
 });
 </script>
 

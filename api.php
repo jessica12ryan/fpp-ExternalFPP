@@ -292,7 +292,12 @@ function efppValidateData($data, $existing) {
     $errors = array();
     $clean = $existing;
 
-    $clean['enabled'] = !empty($data['enabled']) ? 1 : 0;
+    // Only touch 'enabled' when the caller explicitly sends it, so that a
+    // plain settings save (without the enabled field) never turns the
+    // external port off. Enable/disable is handled by the start/stop endpoints.
+    if (array_key_exists('enabled', $data)) {
+        $clean['enabled'] = !empty($data['enabled']) ? 1 : 0;
+    }
 
     $port = (int)($data['port'] ?? $existing['port']);
     if ($port < 1 || $port > 65535) {
