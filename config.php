@@ -49,29 +49,26 @@ if (file_exists($settingsFile)) {
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding: 4px;"><b>External access:</b></td>
+                    <td style="padding: 4px;"><b>External access:</b><?php echo efppHelp('Turns the password-protected port on/off without changing the settings below.'); ?></td>
                     <td style="padding: 4px;">
                         <button type="button" id="efpp_toggle" class="buttons" onclick="efpp.toggle();">
                             <?php echo $enabled ? 'Disable External Access' : 'Enable External Access'; ?>
                         </button>
-                        <i>(turns the password-protected port on/off without changing the settings below)</i>
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding: 4px;"><b>Listen port:</b></td>
+                    <td style="padding: 4px;"><b>Listen port:</b><?php echo efppHelp('The new password-protected port, e.g. 8080.'); ?></td>
                     <td style="padding: 4px;">
                         <input type="number" id="efpp_port" min="1" max="65535" size="8"
                                value="<?php echo htmlspecialchars($port); ?>">
-                        <i>(the new password-protected port, e.g. 8080)</i>
                     </td>
                 </tr>
                 <?php if (!empty($efpp_ui_level) && $efpp_ui_level >= 2): ?>
                 <tr>
-                    <td style="padding: 4px;"><b>Backend port (FPP web):</b></td>
+                    <td style="padding: 4px;"><b>Backend port (FPP web):</b><?php echo efppHelp("Normally 80; only change if FPP's UI is served on another port."); ?></td>
                     <td style="padding: 4px;">
                         <input type="number" id="efpp_backend_port" min="1" max="65535" size="8"
                                value="<?php echo htmlspecialchars($backendPort); ?>">
-                        <i>(normally 80, only change if FPP's UI is served on another port)</i>
                     </td>
                 </tr>
                 <?php else: ?>

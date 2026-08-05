@@ -55,6 +55,19 @@ function efpp_ui_level() {
 
 $efpp_ui_level = efpp_ui_level();
 
+// Renders FPP's standard "?" help-tooltip icon next to a field label. The
+// markup (class, icon path, data-bs-* attributes) matches what FPP itself
+// emits via ArgHelpIcon() so tooltips behave and look identical to FPP's
+// settings pages. Bootstrap tooltips are wired up in the script below.
+function efppHelp($tip) {
+	$tip = trim((string)$tip);
+	if ($tip === '') {
+		return '';
+	}
+	$t = htmlspecialchars($tip, ENT_QUOTES, 'UTF-8');
+	return ' <span class="argHelpIcon" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="auto" data-bs-title="' . $t . '"><img src="images/redesign/help-icon.svg" class="icon-help" alt="Help icon"></span>';
+}
+
 $efpp_tabs = Array(
 	Array('page' => 'status.php', 'icon' => '&#9632;', 'label' => 'Status'),
 	Array('page' => 'config.php', 'icon' => '&#9881;', 'label' => 'Config'),
@@ -93,3 +106,17 @@ if ($efpp_ui_level >= 1) {
 	<a href="plugin.php?plugin=fpp-ExternalFPP&page=<?php echo $efpp_tab['page']; ?>" class="<?php echo efpp_tab_active($efpp_tab['page']); ?>"><?php echo $efpp_tab['icon']; ?> <?php echo $efpp_tab['label']; ?></a>
 <?php endforeach; ?>
 </div>
+
+<script>
+// Wire up the "?" help icons the same way FPP does (Bootstrap tooltip with
+// data-bs-title). Runs on ready since the tab bar is emitted before the rest
+// of the page body.
+$(function () {
+	if (window.bootstrap && bootstrap.Tooltip) {
+		$('.argHelpIcon').each(function () {
+			try { new bootstrap.Tooltip(this); }
+			catch (e) { console.warn('Skipping invalid efpp help tooltip:', e); }
+		});
+	}
+});
+</script>
