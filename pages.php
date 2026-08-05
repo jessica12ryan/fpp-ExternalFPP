@@ -253,14 +253,14 @@ var efppPages = {
     },
 
     renderPreview: function(s) {
-        var preview = 'External port is disabled (enable it in the Config tab)';
         if (s.enabled) {
             var base = 'http://' + window.location.hostname + ':' + s.port;
-            preview = '<a href="' + base + '/login.html" target="_blank">' + base + '/login.html</a>'
-                + ' &mdash; <a href="' + base + '/change-password.html" target="_blank">' + base + '/change-password.html</a>';
+            $('#efpp_preview_login').html('<a href="' + base + '/login.html" target="_blank">' + base + '/login.html</a>');
+            $('#efpp_preview_change').html('<a href="' + base + '/change-password.html" target="_blank">' + base + '/change-password.html</a>');
+        } else {
+            $('#efpp_preview_login').html('<span class="text-secondary">External port is disabled (enable it in the Config tab)</span>');
+            $('#efpp_preview_change').html('<span class="text-secondary">External port is disabled (enable it in the Config tab)</span>');
         }
-        $('#efpp_preview_login').html(preview);
-        $('#efpp_preview_change').html(preview);
     }
 };
 
