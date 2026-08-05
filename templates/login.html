@@ -42,14 +42,9 @@
   .logo {
     width: 56px;
     height: 56px;
-    line-height: 56px;
     margin: 0 auto 12px;
     border-radius: 12px;
-    background: var(--accent);
-    color: #1c1e21;
-    font-weight: 800;
-    font-size: 22px;
-    letter-spacing: 1px;
+    background: var(--accent) url("icon.png") center/cover no-repeat;
   }
   h1 { font-size: 20px; margin: 0 0 6px; }
   .brand p { color: var(--muted); font-size: 13px; margin: 0; }
@@ -92,9 +87,10 @@
 <body>
   <div class="login-card">
     <div class="brand">
-      <div class="logo">FPP</div>
+      <div class="logo"></div>
       <h1>External FPP Web Access</h1>
-      <p>This port is password-protected. Sign in to continue to the FPP web UI.</p>
+      <p>This port is password-protected.<br>
+      Sign in to continue to the FPP web UI.</p>
     </div>
     <div class="error" id="login_error">Incorrect username or password. Please try again.</div>
     <form method="post" action="/">
@@ -104,7 +100,6 @@
       <input type="password" id="httpd_password" name="httpd_password" autocomplete="current-password" required>
       <button type="submit">Sign In</button>
     </form>
-    <p class="foot">Credentials are checked by this port only.</p>
   </div>
   <script>
     // mod_auth_form redirects back here after a failed login. There is no
