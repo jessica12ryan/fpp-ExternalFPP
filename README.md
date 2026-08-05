@@ -1,144 +1,120 @@
-# External FPP Web Access (fpp-ExternalFPP)
+# External FPP Web Access
 
-> **An FPP plugin that opens an additional TCP port which serves FPP's web UI behind a login page (username and password).**
+> **Add a second, password-protected web address for your FPP.** Visitors log in with a username and password before they reach the FPP dashboard.
 
-The normal FPP web UI (port 80) is left completely untouched. This plugin adds a
-*second*, password-protected port that reverse-proxies the same FPP web UI. Visitors
-to that port are greeted by a sign-in page instead of the FPP dashboard. This is
-useful when you want to hand a URL to guests, remote users, or a DMZ without exposing
-the main UI, or when you simply want an extra layer of credentials in front of the UI.
+---
 
-It is implemented as a second Apache virtual host on FPP's *existing* web server
-(FPP already runs Apache) - **no extra packages or daemons are required**.
+## What it does
 
-## Requirements
+FPP's normal web UI (port `80`) is left exactly as it is. This plugin opens an **additional web address** that shows the *same* FPP interface, but only after a **login page**.
 
-- FPP 8+ (uses FPP's built-in Apache 2 web server)
-- Apache modules `mod_proxy`, `mod_proxy_http`, `mod_auth_form`, `mod_session`,
-  `mod_session_cookie`, `mod_request`, `mod_authn_file`, `mod_alias` (enabled automatically by the
-  plugin install script)
-- The FPP web UI reachable on its normal port (default `80`)
+Use it when you want to:
+
+- share access to your lights without handing out the main FPP address,
+- add an extra layer of credentials in front of the dashboard,
+- let guests or remote users in without exposing the regular UI.
+
+No extra software is needed — it uses the web server that is already built into FPP.
+
+---
+
+## Before you start
+
+- FPP 8 or newer
+- FPP's web UI working on its normal port (default `80`)
+
+---
 
 ## Installation
 
-### Plugin Manager (Recommended)
+### Recommended: Plugin Manager
 
-1. In FPP UI, go to **Content Setup -> Plugin Manager**
-2. Enter this URL and click **Get Plugin Info**:
+1. In FPP's UI, go to **Content Setup → Plugin Manager**.
+2. Paste this address and click **Get Plugin Info**:
 
    ```
    https://raw.githubusercontent.com/jessica12ryan/fpp-ExternalFPP/main/pluginInfo.json
    ```
 
-3. Click **Install** next to the "External FPP Web Access" plugin.
+3. Click **Install** next to "External FPP Web Access".
 
-### Manual
+### Manual install
 
-```bash
-cd /home/fpp/media/plugins
-git clone https://github.com/jessica12ryan/fpp-ExternalFPP.git
-cd fpp-ExternalFPP
-sudo bash scripts/fpp_install.sh
-```
+For advanced users who prefer the command line, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Configuration
+---
 
-1. Go to **Content Setup -> External FPP**
-2. Add at least one **user** (username + password) in the **Users** tab
-3. Set the **Listen Port** (default `8080`) that will serve the protected UI in the **Config** tab
-4. Click **Save & Apply**, then click the **Enable External Access** toggle button
+## First-time setup
 
-Once enabled you can browse to:
+1. In FPP, go to **Content Setup → External FPP**.
+2. Open the **Users** tab and add at least one user (a username and password).
+3. Open the **Config** tab and pick an **Listen Port** (the default `8080` is usually fine).
+4. Click **Save & Apply**.
+5. Click the button to **enable** external access.
+
+Now browse to:
 
 ```
-http://<fpp-ip>:8080/
+http://<your-fpp-ip>:8080/
 ```
 
-You are shown a **login page**. Enter any configured username/password to reach the FPP
-web UI. Requests without a valid session are redirected back to the login page. The
-plugin requires at least one user: you cannot enable it with zero users, and while it is
-enabled the last user cannot be deleted.
+You'll see a login page. Enter the username and password you created to reach the FPP dashboard.
 
-## Customizing the pages
+> **Note:** You need at least one user to turn this on, and you can't delete the last user while it's enabled.
 
-The pages are just HTML. Open the plugin's **Pages** tab, edit the **Login Page** or the
-**Change Password Page**, and click **Save** - the change applies immediately (Apache
-reads the file on every request). The pages are stored at `www/login.html` and
-`www/change-password.html` in the plugin directory.
+---
 
-For login to work the login page must contain a `<form method="post">` that posts to the
-protected port (`action="/"`) with `<input name="httpd_username">` and
-`<input name="httpd_password">` fields. The **Pages** tab shows this required code and
-warns you if it is missing when you save.
+## Customizing the login page
 
-After a successful login you land on the **Change Password Page**. Users marked
-**must change password at next login** (Users tab) are held there until they set a new
-password; everyone else is forwarded straight to the FPP web UI.
+The login page is ordinary HTML you can edit in a text box:
 
-To sign out, visit `http://<fpp-ip>:8080/logout`.
+1. Open the **Pages** tab in the plugin.
+2. Edit the **Login Page** or the **Change Password Page**.
+3. Click **Save** — your change is applied straight away.
 
-## How it works
+The **Pages** tab tells you which bits are required for the page to work and warns you if they're missing.
 
-| Piece | Detail |
-| --- | --- |
-| Apache vhost | `<VirtualHost *:<port>>` added under `/etc/apache2/conf-available/fpp-externalfpp.conf` |
-| Authentication | Form login using `mod_auth_form` + `mod_session`/`mod_session_cookie`, checked against a `.htpasswd` file in the plugin's `config/` directory |
-| Login page | Served directly from `www/login.html` (not proxied), reachable without a session |
-| Change password page | Served from `www/change-password.html`; the login success location, so users who **must** change their password are held there first |
-| Proxy | `ProxyPass / http://127.0.0.1:80/` with `ProxyPreserveHost On` so cookies/sessions work normally |
-| Persistence | The Apache `conf-enabled` symlink survives reboots, so the extra port comes up at boot |
-| Cleanup | Uninstalling the plugin disables the vhost and removes the Apache config file |
+---
 
-The password hash is written with `htpasswd -B` (bcrypt) when `apache2-utils` is
-present, and falls back to a `{SHA}` hash (supported by every Apache 2.4 build)
-otherwise.
+## Changing a user's password
 
-## Troubleshooting
+- To change **someone else's** password, use **Change Password** in the **Users** tab.
+- To force a user to set a new password next time they log in, tick **must change password at next login** in the Users tab. They'll land on the password page and be held there until they do.
 
-- Check the plugin log:
-  ```bash
-  tail -20 /home/fpp/media/logs/plugin-fpp-ExternalFPP.log
-  ```
-- Check Apache error log for the external port:
-  ```bash
-  sudo tail -50 /home/fpp/media/logs/apache2-externalfpp-error.log
-  ```
-- Verify the vhost is loaded:
-  ```bash
-  sudo apachectl -S | grep -i 8080
-  ```
-- Port already in use? Pick a different **Listen Port** in the plugin config.
+---
 
-### "I logged in but the browser asks for a password again"
+## Signing out
 
-The plugin uses a **login page + session cookie**, not HTTP Basic Auth, so the old
-"prompts forever" loop no longer applies. If you are still prompted after signing in,
-it is **FPP's built-in UI password** (Status/Control -> FPP Settings -> UI tab). FPP's
-own Apache adds that check on port 80, and the prompt shows through the proxied pages.
+Visit:
 
-This plugin proxies through the FPP itself, which FPP normally exempts from its own password, so
-on a standard FPP the two passwords do not clash. If you still see the prompt:
+```
+http://<your-fpp-ip>:8080/logout
+```
 
-1. Open the plugin's **Status** tab and check the "FPP built-in UI password" row.
-2. Either turn off FPP's UI password (Status/Control -> FPP Settings -> UI tab -> Enable UI
-   password = No) since this plugin provides its own, or
-3. When prompted a second time on the external port, enter FPP's own admin credentials
-   (username `admin` and the password you set for FPP's UI).
+This removes your login and returns you to the login page.
 
-The plugin never forwards your credentials to FPP's web server, so the two layers stay
-independent.
+---
 
-## Security notes
+## Common questions
 
-- Traffic on the additional port is plain HTTP. The login password is submitted as form
-  data and the session cookie stores the login details in a reversible form, so both can
-  be read on the wire. Do **not** expose it directly to the internet - put it behind a
-  VPN or a TLS-terminating reverse proxy if you need remote access.
-- If FPP's built-in **UI Password** is also configured, requests proxied through this
-  plugin may be challenged by *both* layers depending on FPP's auth configuration.
-- This plugin does not modify or remove the normal, unprotected FPP UI on port 80.
+### "I can't reach the external port"
+
+- Check the **Status** tab — the "Apache vhost enabled" and "port listening" indicators should both be green.
+- Make sure the port isn't already used by something else on your network.
+
+### "I still get asked for a password after logging in"
+
+- Turn off FPP's own **built-in UI password** (Status/Control → FPP Settings → UI tab), because this plugin already provides one.
+- Or, when prompted for a second password, enter FPP's admin credentials (username `admin` and FPP's UI password).
+
+### "Is my password safe?"
+
+The additional port uses plain HTTP, and login details are carried in the session cookie. Don't share that port with the public internet — put it behind a VPN or an encrypted reverse proxy for remote access. See [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+---
 
 ## License
 
-MIT. FPP is (c) Falcon Christmas. This plugin is an independent integration and is
-not affiliated with or endorsed by the Falcon Christmas project.
+Copyright © 2026 jessica12ryan. Licensed under the MIT License.
+
+FPP is © Falcon Christmas. This plugin is an independent integration and is not affiliated with or endorsed by the Falcon Christmas project.

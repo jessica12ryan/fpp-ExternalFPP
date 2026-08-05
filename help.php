@@ -23,9 +23,9 @@ $pluginDir = __DIR__;
             <h3>What This Plugin Does</h3>
             <p>
                 FPP's web UI is normally served without any password on port 80. This plugin adds a
-                <b>new port</b> (default <code>8080</code>) that serves the exact same UI but first asks
-                for a <b>username and password</b>. Nothing on the normal port is changed, so local
-                users keep working exactly as before.
+                <b>new web address</b> (default <code>8080</code>) that shows the exact same UI but
+                first asks for a <b>username and password</b>. Nothing on the normal port is changed,
+                so local users keep working exactly as before.
             </p>
 
             <hr>
@@ -51,25 +51,29 @@ $pluginDir = __DIR__;
 
             <hr>
 
+            <h3>Managing Users</h3>
+            <ul>
+                <li><b>Add a user:</b> use the <b>Users</b> tab and pick a username and password.</li>
+                <li><b>Change a password:</b> use <b>Change Password</b> on that user's row in the <b>Users</b> tab.</li>
+                <li><b>Force a password reset:</b> tick <b>must change password at next login</b> for the user. The next time they sign in they will be held on the password page until they set a new one.</li>
+                <li><b>Remove a user:</b> use the delete button on that user's row (you can't delete the last user while external access is enabled).</li>
+            </ul>
+
+            <hr>
+
             <h3>Customizing the Pages</h3>
             <p>
                 Open the <b>Pages</b> tab to edit the HTML of the <b>Login Page</b> (shown to
                 visitors who are not signed in) and the <b>Change Password Page</b> (shown right
                 after signing in). Each editor lists the code that is required for the page to
-                work &mdash; e.g. the <code>&lt;form method="post"&gt;</code> and the
+                work &mdash; for example the <code>&lt;form method="post"&gt;</code> and the
                 <code>httpd_username</code> / <code>httpd_password</code> fields on the login
-                page. Pages are stored in the plugin's <code>www/</code> folder and are read by
-                Apache on every request, so changes take effect as soon as you save them.
+                page. Pages are read on every request, so changes take effect as soon as you
+                save them.
             </p>
             <p>
-                After a successful login you land on the Change Password Page. If the user has
-                been marked <b>must change password at next login</b> (in the Users tab), they are
-                held on this page until a new password is set; everyone else is forwarded straight
-                to the FPP web UI.
-            </p>
-            <p>
-                To sign out, visit <code>/logout</code> in the browser (this removes the session
-                cookie and returns you to the login page).
+                To sign out, visit <code>/logout</code> in the browser (this removes your login
+                and returns you to the login page).
             </p>
 
             <hr>
@@ -77,7 +81,7 @@ $pluginDir = __DIR__;
             <h3>Changing the Listen Port</h3>
             <p>
                 Change the <b>Listen port</b> in the Config tab and click <b>Save &amp; Apply</b>.
-                The plugin rewrites the Apache virtual host and reloads Apache automatically.
+                Everything updates automatically &mdash; just use your new address from then on.
             </p>
 
             <hr>
@@ -89,9 +93,11 @@ $pluginDir = __DIR__;
                     login details in a reversible form. Both can be read by anyone on the
                     network. Do not expose this port to the public internet &mdash; put it
                     behind a VPN or a TLS reverse proxy for remote access.</li>
-                <li>If FPP's built-in <b>UI Password</b> is also configured, requests through this
-                    port may additionally be challenged by that password, depending on FPP's Apache
-                    auth configuration.</li>
+                <li>This plugin provides its own password protection. If FPP's built-in
+                    <b>UI Password</b> is also switched on, you may be asked for a second
+                    password. The simplest fix is to turn FPP's built-in UI password off
+                    (Status/Control &rarr; FPP Settings &rarr; UI tab), or enter FPP's own
+                    admin credentials when prompted.</li>
             </ul>
 
             <hr>
@@ -100,55 +106,51 @@ $pluginDir = __DIR__;
 
             <h4>The external port is not reachable</h4>
             <ul>
-                <li>Check the Status tab: the <b>Apache vhost enabled</b> and <b>port listening</b>
-                    indicators should both show green.</li>
-                <li>Check the plugin log:
-                    <pre>tail -20 /home/fpp/media/logs/plugin-fpp-ExternalFPP.log</pre>
-                </li>
-                <li>Check Apache:
-                    <pre>sudo apachectl -S | grep -i 8080
-sudo tail -50 /home/fpp/media/logs/apache2-externalfpp-error.log</pre>
-                </li>
-                <li>Make sure the port isn't already in use by another service on the FPP.</li>
+                <li>Check the <b>Status</b> tab: the <b>Apache vhost enabled</b> and <b>port listening</b>
+                    indicators should both be green.</li>
+                <li>Make sure the port isn't already in use by another service on your FPP.</li>
+                <li>If you changed the port, remember to browse to the <b>new</b> address.</li>
             </ul>
 
             <h4>Getting a 503 / Bad Gateway</h4>
             <p>
-                The backend FPP web server isn't reachable on <code>127.0.0.1:&lt;backend port&gt;</code>.
-                Confirm the backend port in the Config tab matches where FPP actually serves its UI
-                (normally <code>80</code>).
+                FPP's own web server can't be reached. Confirm the <b>backend port</b> in the
+                Config tab matches where FPP actually serves its UI (normally <code>80</code>),
+                then click <b>Save &amp; Apply</b>.
             </p>
 
             <h4>Getting sent back to the login page even with the right password</h4>
-            <p>
-                The password may have been changed but not written to the password file yet, or the
-                password file may have been overwritten. Set the user's password again in the
-                <b>Users</b> tab (add the user or use <b>Change Password</b>). Also check the
-                <b>Pages</b> tab: if the saved login page is missing the required
-                <code>httpd_username</code> / <code>httpd_password</code> form fields, logging in
-                cannot work.
-            </p>
+            <ul>
+                <li>Set the user's password again in the <b>Users</b> tab (add the user or use
+                    <b>Change Password</b>).</li>
+                <li>Check the <b>Pages</b> tab: if the saved login page is missing the required
+                    <code>httpd_username</code> / <code>httpd_password</code> form fields, logging in
+                    cannot work.</li>
+            </ul>
 
             <h4>Asked for a password again after logging in</h4>
             <p>
-                The plugin now uses a <b>login page + session cookie</b> instead of HTTP Basic Auth,
+                This plugin now uses a <b>login page + session cookie</b> instead of HTTP Basic Auth,
                 so the old &quot;prompts forever&quot; loop is gone. If you are still prompted for a
                 password after signing in, it is <b>FPP's built-in UI password</b> (Status/Control
-                &rarr; FPP Settings &rarr; UI tab). FPP's own Apache adds that check on the regular
-                port 80, and the prompt appears through the proxied pages too.
+                &rarr; FPP Settings &rarr; UI tab).
             </p>
             <p>
-                On a standard FPP this plugin normally avoids the clash because the extra port
-                proxies through the FPP itself, which FPP exempts from its own password. If you still
-                see the prompt, the cleanest fix is to <b>turn off FPP's built-in UI password</b> &mdash;
-                this plugin provides its own password, so FPP's is no longer needed:
-                <b>Status/Control &rarr; FPP Settings &rarr; UI tab &rarr; enable &quot;Enable UI
-                password&quot; = No</b>, then click <b>Save &amp; Apply</b> in this plugin again.
+                The cleanest fix is to <b>turn off FPP's built-in UI password</b> &mdash; this plugin
+                provides its own, so FPP's is no longer needed: go to <b>Status/Control &rarr; FPP
+                Settings &rarr; UI tab &rarr; set &quot;Enable UI password&quot; to No</b>, then click
+                <b>Save &amp; Apply</b> in this plugin again.
             </p>
             <p>
                 Alternatively, when you are prompted a second time on the external port, enter FPP's
                 own admin credentials (username <code>admin</code> and the password you set for FPP's
                 UI) and you should get through.
+            </p>
+
+            <h4>I logged in but I don't see the plugin's Logs tab</h4>
+            <p>
+                The <b>Logs</b> tab is hidden unless FPP's interface is set to <b>Advanced</b> or
+                higher (Status/Control &rarr; FPP Settings &rarr; UI tab &rarr; User Interface Level).
             </p>
         </div>
     </fieldset>

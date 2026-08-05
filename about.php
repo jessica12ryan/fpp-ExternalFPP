@@ -23,32 +23,21 @@ $pluginDir = __DIR__;
                 <h3 style="margin-top:0;">External FPP Web Access</h3>
 
                 <p>
-                    Adds a <b>second, password-protected port</b> that serves the same FPP web UI.
-                    The normal UI on port 80 is left completely unchanged.
+                    Adds a <b>second, password-protected web address</b> that serves the same FPP
+                    web UI. The normal UI on port 80 is left completely unchanged.
                 </p>
 
                 <h4>Features</h4>
                 <ul>
-                    <li>Reverse-proxies FPP's web UI to an additional TCP port of your choice</li>
-                    <li>Protects that port with a username + password login page (form login)</li>
-                    <li>Uses FPP's existing Apache web server &mdash; no extra packages or daemons</li>
-                    <li>Survives reboots (the extra port comes up at boot)</li>
-                    <li>Password hashes written with bcrypt when available</li>
+                    <li>Serves FPP's web UI on an extra port of your choice</li>
+                    <li>Protects that port with a username + password login page</li>
+                    <li>No extra packages or daemons to install &mdash; it uses FPP's own web server</li>
+                    <li>Survives reboots (the extra port comes up when FPP starts)</li>
                     <li>Supports multiple users (add / delete / change password from the UI)</li>
                     <li>One-click enable / disable / test from the UI</li>
+                    <li>Editable login and password pages</li>
+                    <li>Forced password change on next login for selected users</li>
                 </ul>
-
-                <h4>How It Works</h4>
-                <ol>
-                    <li>The plugin writes an Apache virtual host that listens on the extra port</li>
-                    <li>Anonymous requests are sent to a login page; on a successful login Apache
-                        sets a session cookie and proxies the request to FPP</li>
-                    <li>Every login is checked against the configured users
-                        (<code>mod_auth_form</code> + a local <code>.htpasswd</code> file)</li>
-                    <li>Authenticated requests are reverse-proxied to the normal FPP web server
-                        on <code>127.0.0.1:80</code></li>
-                    <li>The <code>Host</code> header is preserved so cookies and sessions work as expected</li>
-                </ol>
 
                 <h4>Links</h4>
                 <p>

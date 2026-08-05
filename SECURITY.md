@@ -16,8 +16,8 @@ could be exploited before a fix is released.
   stores the login details in a reversible form, so both are visible on the wire.
   This port should not be exposed to untrusted networks. If you need encryption,
   terminate TLS in front of it (VPN or reverse proxy).
-- User passwords are stored in the plugin's `config/settings.json` as plain text (so
-  the `Test` button can exercise a real login) and the password *hashes* are written
-  to `.htpasswd` under the plugin's `config/` directory (owned by the `fpp` user and
-  readable only by local processes). Keep the plugin directory protected.
+- User passwords are stored as **bcrypt hashes** in the plugin's `config/settings.json`, and the
+  same hashes are written to `.htpasswd` under the plugin's `config/` directory (owned by the
+  `fpp` user and readable only by local processes). No plaintext passwords are kept on disk. Keep
+  the plugin directory protected.
 - The plugin intentionally does not touch the primary FPP web UI or its port.
