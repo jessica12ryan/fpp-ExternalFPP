@@ -675,6 +675,11 @@ function efppGetSessionUserEndpoint() {
             break;
         }
     }
+
+    // The session-user endpoint is only called from the change-password page,
+    // which is the AuthFormLoginSuccessLocation, so each call marks a login.
+    efppLog('SUCCESS Login: ' . $user);
+
     return json(array('success' => true, 'username' => $user, 'must_change' => $mustChange));
 }
 
