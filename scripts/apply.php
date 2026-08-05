@@ -8,7 +8,7 @@
  * #############################################################
  * ## scripts/apply.php                                       ##
  * ## Applies plugin settings to Apache:                      ##
- * ##  1. Writes the .htpasswd file (bcrypt, or {SHA} fallback)
+ * ##  1. Writes the .htpasswd file (bcrypt, from stored hashes)
  * ##  2. Writes /etc/apache2/conf-available/fpp-externalfpp.conf
  * ##  3. Enables/disables the conf via a2enconf/a2disconf    ##
  * ##  4. Validates and reloads Apache                        ##
@@ -92,9 +92,34 @@ function efppUsersFromSettings($s) {
     return $users;
 }
 
+function efppPasswordIsHash($password) {
+    return is_string($password) && preg_match('/^\$2[abxy]\$/', $password) === 1;
+}
+
+function efppHashPassword($plain) {
+    return password_hash((string)$plain, PASSWORD_BCRYPT);
+}
+
 /**
- * Writes the Apache password file. Prefers bcrypt via the htpasswd binary,
- * falls back to a {SHA} hash that every Apache 2.4 build supports.
+ * Converts any plaintext passwords in the settings file to bcrypt hashes and
+ * saves the file back, so passwords are never stored in the clear.
+ */
+function efppMigratePasswordHashes(&$s) {
+    $changed = false;
+    foreach (($s['users'] ?? array()) as $i => $u) {
+        if (is_array($u) && isset($u['password']) && !efppPasswordIsHash($u['password'])) {
+            $s['users'][$i]['password'] = efppHashPassword($u['password']);
+            $changed = true;
+        }
+    }
+    if ($changed) {
+        @file_put_contents(SETTINGS_FILE, json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+        efppLog('Hashed plaintext passwords in ' . SETTINGS_FILE);
+    }
+}
+
+/**
+ * Writes the Apache password file from the stored bcrypt hashes.
  */
 function efppEnsureConfigDir() {
     if (!is_dir(PLUGIN_DIR . '/config')) {
@@ -180,10 +205,9 @@ function efppEnsurePages() {
 }
 
 /**
- * Writes every user to the Apache password file. Prefers bcrypt via the
- * htpasswd binary, falls back to a {SHA} hash that every Apache 2.4 build
- * supports. Returns array(true, message) on success, array(false, error) on
- * failure.
+ * Writes every user to the Apache password file. Uses the stored bcrypt hash
+ * directly (Apache accepts $2y$ natively), so no plaintext is ever written.
+ * Returns array(true, message) on success, array(false, error) on failure.
  */
 function efppWriteHtpasswd($users) {
     $users = efppUsersFromSettings(array('users' => $users));
@@ -199,43 +223,17 @@ function efppWriteHtpasswd($users) {
         return array(true, 'Removed password file (no users configured)');
     }
 
-    $which = efppRun('command -v htpasswd');
-    $htpasswd = ($which['code'] === 0 && trim($which['output']) !== '') ? trim($which['output']) : '';
-
-    if ($htpasswd === '') {
-        // Fallback: {SHA} + base64(SHA-1) - accepted by mod_authn_file everywhere.
-        $content = '';
-        foreach ($users as $u) {
-            $content .= $u['username'] . ':{SHA}' . base64_encode(sha1($u['password'], true)) . "\n";
-        }
-        if (@file_put_contents(HTPASSWD_FILE, $content) === false) {
-            return array(false, 'Could not write the password file to ' . HTPASSWD_FILE);
-        }
-        efppRun('chown fpp:fpp ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
-        efppRun('chmod 644 ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
-        return array(true, 'Password file written for ' . count($users) . ' user(s) using {SHA} fallback (install apache2-utils for bcrypt)');
-    }
-
-    @unlink(HTPASSWD_FILE);
-    $first = true;
-    $failed = array();
+    $content = '';
     foreach ($users as $u) {
-        $r = efppRun($htpasswd . ' -b -B ' . ($first ? '-c ' : '') . escapeshellarg(HTPASSWD_FILE) . ' '
-            . escapeshellarg($u['username']) . ' ' . escapeshellarg($u['password']));
-        if ($r['code'] !== 0) {
-            $failed[] = $u['username'];
-        }
-        $first = false;
+        $hash = efppPasswordIsHash($u['password']) ? $u['password'] : efppHashPassword($u['password']);
+        $content .= $u['username'] . ':' . $hash . "\n";
     }
-
-    if (empty($failed) && file_exists(HTPASSWD_FILE)) {
-        efppRun('chown fpp:fpp ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
-        efppRun('chmod 644 ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
-        return array(true, 'Password file written for ' . count($users) . ' user(s) using bcrypt');
+    if (@file_put_contents(HTPASSWD_FILE, $content) === false) {
+        return array(false, 'Could not write the password file to ' . HTPASSWD_FILE);
     }
-
-    @unlink(HTPASSWD_FILE);
-    return array(false, 'Could not write the password file. htpasswd failed for: ' . implode(', ', $failed));
+    efppRun('chown fpp:fpp ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
+    efppRun('chmod 644 ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
+    return array(true, 'Password file written for ' . count($users) . ' user(s) using bcrypt');
 }
 
 function efppBuildApacheConf($port, $backendPort, $htpasswdFile, $loginPageFile, $changePwFile) {
@@ -391,6 +389,9 @@ function efppApply() {
     $enabled = !empty($s['enabled']);
     $port = (int)$s['port'];
     $backendPort = (int)$s['backend_port'];
+
+    // Passwords are stored as bcrypt hashes; hash any legacy plaintext on disk.
+    efppMigratePasswordHashes($s);
     $users = efppUsersFromSettings($s);
 
     efppEnsureConfigDir();

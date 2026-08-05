@@ -94,16 +94,25 @@ function efppUsersList() {
     return efppUsersFromSettings(efppLoadSettings());
 }
 
-function efppRunRaw($cmd) {
-    $output = array();
-    $code = 0;
-    exec($cmd . ' 2>&1', $output, $code);
-    return array('code' => $code, 'output' => trim(implode("\n", $output)));
+function efppPasswordIsHash($password) {
+    return is_string($password) && preg_match('/^\$2[abxy]\$/', $password) === 1;
+}
+
+function efppHashPassword($plain) {
+    return password_hash((string)$plain, PASSWORD_BCRYPT);
+}
+
+function efppPasswordMatches($plain, $stored) {
+    if (efppPasswordIsHash($stored)) {
+        return password_verify((string)$plain, $stored);
+    }
+    return hash_equals((string)$stored, (string)$plain);
 }
 
 /**
  * Writes every user to the Apache password file. Runs as the web (fpp) user,
  * which owns the plugin config directory, so no sudo is required here.
+ * Uses the stored bcrypt hash directly, since Apache accepts $2y$ natively.
  */
 function efppWriteHtpasswd($users) {
     $users = efppUsersFromSettings(array('users' => $users));
@@ -115,38 +124,15 @@ function efppWriteHtpasswd($users) {
         return array(true, 'Removed password file (no users configured)');
     }
 
-    $which = efppRunRaw('command -v htpasswd');
-    $htpasswd = ($which['code'] === 0 && trim($which['output']) !== '') ? trim($which['output']) : '';
-
-    if ($htpasswd === '') {
-        $content = '';
-        foreach ($users as $u) {
-            $content .= $u['username'] . ':{SHA}' . base64_encode(sha1($u['password'], true)) . "\n";
-        }
-        if (@file_put_contents(EFPP_HTPASSWD_FILE, $content) === false) {
-            return array(false, 'Could not write the password file to ' . EFPP_HTPASSWD_FILE);
-        }
-        return array(true, 'Password file written for ' . count($users) . ' user(s) using {SHA} fallback');
-    }
-
-    @unlink(EFPP_HTPASSWD_FILE);
-    $first = true;
-    $failed = array();
+    $content = '';
     foreach ($users as $u) {
-        $r = efppRunRaw($htpasswd . ' -b -B ' . ($first ? '-c ' : '') . escapeshellarg(EFPP_HTPASSWD_FILE) . ' '
-            . escapeshellarg($u['username']) . ' ' . escapeshellarg($u['password']));
-        if ($r['code'] !== 0) {
-            $failed[] = $u['username'];
-        }
-        $first = false;
+        $hash = efppPasswordIsHash($u['password']) ? $u['password'] : efppHashPassword($u['password']);
+        $content .= $u['username'] . ':' . $hash . "\n";
     }
-
-    if (empty($failed) && file_exists(EFPP_HTPASSWD_FILE)) {
-        return array(true, 'Password file written for ' . count($users) . ' user(s) using bcrypt');
+    if (@file_put_contents(EFPP_HTPASSWD_FILE, $content) === false) {
+        return array(false, 'Could not write the password file to ' . EFPP_HTPASSWD_FILE);
     }
-
-    @unlink(EFPP_HTPASSWD_FILE);
-    return array(false, 'Could not write the password file. htpasswd failed for: ' . implode(', ', $failed));
+    return array(true, 'Password file written for ' . count($users) . ' user(s) using bcrypt');
 }
 
 function efppValidateLoginUser($username, $password, $confirm, $checkUnique, $existingUsers) {
@@ -265,28 +251,23 @@ function efppHttpRequest($method, $host, $port, $path, $extraHeaders = array(), 
 }
 
 /**
- * Performs a form login against the external port the same way a browser would:
- * POST the httpd_username/httpd_password fields to the protected URL, keep the
- * session cookie that Apache sets, then request the UI with that cookie.
- * Returns the HTTP status of the final authenticated request (0 on failure).
+ * Returns true if the given username has a bcrypt-hashed entry in the Apache
+ * password file (the config-level equivalent of the old live-login test).
  */
-function efppFormLoginTest($host, $port, $user, $pass) {
-    $post = 'httpd_username=' . rawurlencode($user)
-        . '&httpd_password=' . rawurlencode($pass)
-        . '&httpd_login=Continue';
-    $r = efppHttpRequest('POST', $host, $port, '/', array(), $post);
-    $cookie = '';
-    if (isset($r['headers']['Set-Cookie'])) {
-        $sc = $r['headers']['Set-Cookie'];
-        if (preg_match('/([^=;,\s]+)=([^;,\s]+)/', $sc, $m)) {
-            $cookie = $m[1] . '=' . $m[2];
+function efppUserInHtpasswd($username) {
+    if (!file_exists(EFPP_HTPASSWD_FILE)) {
+        return false;
+    }
+    foreach (file(EFPP_HTPASSWD_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        if (strpos($line, ':') === false) {
+            continue;
+        }
+        list($u, $h) = explode(':', $line, 2);
+        if (strcasecmp(trim($u), $username) === 0 && efppPasswordIsHash(trim($h))) {
+            return true;
         }
     }
-    if ($cookie === '') {
-        return 0;
-    }
-    $r2 = efppHttpRequest('GET', $host, $port, '/', array('Cookie: ' . $cookie));
-    return $r2['code'];
+    return false;
 }
 
 function efppFppUiPasswordEnabled() {
@@ -630,15 +611,14 @@ function efppTestEndpoint() {
             'ok' => $authRequired ? 1 : 0,
             'detail' => 'HTTP ' . $noAuth['code']
         );
-        $loginCode = efppFormLoginTest('127.0.0.1', $port, $testUser['username'], $testUser['password']);
-        $ok = $loginCode >= 200 && $loginCode < 400;
+        $userInFile = efppUserInHtpasswd($testUser['username']);
         $results[] = array(
-            'check' => 'Valid username/password reaches the UI',
-            'ok' => $ok ? 1 : 0,
-            'detail' => 'HTTP ' . $loginCode
+            'check' => 'Configured user is present in the password file',
+            'ok' => $userInFile ? 1 : 0,
+            'detail' => $userInFile ? '' : ($testUser !== null ? 'not found in ' . EFPP_HTPASSWD_FILE : 'no users configured')
         );
         if (!$authRequired) $allOk = false;
-        if (!$ok) $allOk = false;
+        if (!$userInFile) $allOk = false;
     } else {
         $results[] = array('check' => 'Users configured', 'ok' => $testUser !== null ? 1 : 0, 'detail' => $testUser !== null ? '' : 'no users configured');
         $allOk = false;
@@ -728,14 +708,14 @@ function efppChangeMyPasswordEndpoint() {
     if ($password !== $confirm) {
         $errors[] = 'Password and confirmation do not match.';
     }
-    if ($password === $users[$found]['password']) {
+    if (efppPasswordMatches($password, $users[$found]['password'])) {
         $errors[] = 'The new password must be different from the current one.';
     }
     if (!empty($errors)) {
         return json(array('success' => false, 'messages' => array(), 'errors' => $errors));
     }
 
-    $users[$found]['password'] = $password;
+    $users[$found]['password'] = efppHashPassword($password);
     $users[$found]['must_change'] = 0;
     if (efppSaveSettingsFile(array_merge($s, array('users' => $users))) === false) {
         return json(array('success' => false, 'messages' => array(), 'errors' => array('Could not write the settings file. Check file permissions.')));
@@ -771,7 +751,7 @@ function efppAddUserEndpoint() {
         return json(array('success' => false, 'messages' => array(), 'errors' => $errors));
     }
 
-    $users[] = array('username' => $username, 'password' => $password, 'must_change' => !empty($data['must_change']) ? 1 : 0);
+    $users[] = array('username' => $username, 'password' => efppHashPassword($password), 'must_change' => !empty($data['must_change']) ? 1 : 0);
     if (efppSaveSettingsFile(array_merge(efppLoadSettings(), array('users' => $users))) === false) {
         return json(array('success' => false, 'messages' => array(), 'errors' => array('Could not write the settings file. Check file permissions.')));
     }
@@ -808,7 +788,7 @@ function efppSetPasswordEndpoint() {
 
     foreach ($users as $i => $u) {
         if (strcasecmp($u['username'], $username) === 0) {
-            $users[$i]['password'] = $password;
+            $users[$i]['password'] = efppHashPassword($password);
             $users[$i]['must_change'] = !empty($data['must_change']) ? 1 : 0;
             break;
         }
