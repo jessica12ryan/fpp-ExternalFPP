@@ -18,17 +18,39 @@ function efpp_tab_active($page) {
 // UI level controls which advanced features are shown. The value is read from
 // FPP's runtime settings ("uiLevel"), which is an integer:
 //   Basic=0, Advanced=1, Experimental=2, Developer=3
+// FPP loads settings into the global $settings array when rendering pages, so
+// that is checked first; a number of on-disk locations/formats are tried as
+// fallbacks to cover the different ways FPP stores its settings.
 function efpp_ui_level() {
-	$file = '/home/fpp/media/settings';
-	if (is_readable($file)) {
-		foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-			if (strncmp($line, 'uiLevel=', 8) === 0) {
-				$v = (int)substr($line, 8);
-				return $v >= 0 ? $v : 0;
-			}
-		}
-	}
-	return 0;
+    if (isset($GLOBALS['settings']) && is_array($GLOBALS['settings'])
+        && isset($GLOBALS['settings']['uiLevel'])) {
+        return (int)$GLOBALS['settings']['uiLevel'];
+    }
+
+    $candidates = array(
+        '/home/fpp/media/settings',   // key=value, used by modern FPP
+        '/opt/fpp/config/settings.json',
+        '/home/fpp/config/settings.json'
+    );
+    foreach ($candidates as $file) {
+        if (!is_file($file) || !is_readable($file)) {
+            continue;
+        }
+        $raw = @file_get_contents($file);
+        if ($raw === false) {
+            continue;
+        }
+        // JSON values file.
+        $json = json_decode($raw, true);
+        if (is_array($json) && isset($json['uiLevel'])) {
+            return (int)$json['uiLevel'];
+        }
+        // key=value flat file (allow optional whitespace around '=').
+        if (preg_match('/^uiLevel[ \t]*=[ \t]*(\d+)/m', $raw, $m)) {
+            return (int)$m[1];
+        }
+    }
+    return 0;
 }
 
 $efpp_ui_level = efpp_ui_level();
