@@ -49,4 +49,14 @@ foreach ($menuEntries as $entry) {
 			$plugin, $entry['page'], $nopage, $entry['text']);
 	}
 }
+
+// Only show the Logout item when the visitor is actually using the external
+// (password-protected) port. That vhost sets X-Remote-User from the Apache
+// session, while the normal FPP backend port never sends it, so this cleanly
+// distinguishes the two, leaving the regular UI unaffected.
+if ($menu == 'status' && !empty($_SERVER['HTTP_X_REMOTE_USER'])) {
+	// The logout handler is local to the external vhost, so link to it
+	// relative (same host/port the page is currently served from).
+	printf("<li><a href='logout'>&#9889; Logout</a></li>\n");
+}
 ?>
