@@ -421,13 +421,17 @@ function efppEnableModules() {
     // (AH02618) even though 'apachectl configtest' passes.
     $required = array('proxy', 'proxy_http', 'headers', 'authn_file', 'auth_form', 'session', 'session_cookie', 'request', 'alias', 'ssl', 'rewrite');
     $missing = array();
+    $newlyEnabled = array();
     foreach ($required as $m) {
+        $wasEnabled = efppModuleEnabled($m);
         efppRun('a2enmod ' . $m . ' >/dev/null 2>&1');
         if (!efppModuleEnabled($m)) {
             $missing[] = $m;
+        } elseif (!$wasEnabled) {
+            $newlyEnabled[] = $m;
         }
     }
-    return $missing;
+    return array($missing, $newlyEnabled);
 }
 
 function efppPortListening($port) {
@@ -443,12 +447,24 @@ function efppPortListening($port) {
     return false;
 }
 
+/**
+ * Apache is "healthy" when the service is active AND the given port is
+ * listening. After a reload/restart Apache may need a moment to bind new
+ * listeners, so the port check retries for a few seconds instead of failing on
+ * the first attempt.
+ */
 function efppApacheHealthy($port) {
     $r = efppRun('systemctl is-active apache2');
     if ($r['code'] !== 0 || strtolower(trim($r['output'])) !== 'active') {
         return false;
     }
-    return efppPortListening($port);
+    for ($i = 0; $i < 10; $i++) {
+        if (efppPortListening($port)) {
+            return true;
+        }
+        usleep(500000);
+    }
+    return false;
 }
 
 function efppApply() {
@@ -470,7 +486,7 @@ function efppApply() {
     efppEnsurePages();
 
     // Always make sure the required Apache modules are present (idempotent).
-    $missingMods = efppEnableModules();
+    list($missingMods, $newlyEnabledMods) = efppEnableModules();
     if (!empty($missingMods)) {
         $msg = 'Required Apache modules could not be enabled: ' . implode(', ', $missingMods) . '.';
         efppLog('ERROR: ' . $msg);
@@ -542,14 +558,37 @@ function efppApply() {
             return array('success' => false, 'errors' => array($msg), 'messages' => $messages);
         }
 
-        list($ok2, $err2) = efppReloadApache();
-        if (!$ok2) {
-            // A reload that kills Apache must never leave the FPP web UI down.
-            efppRun('a2disconf ' . APACHE_CONF_NAME . ' >/dev/null 2>&1');
-            efppRun('systemctl restart apache2 >/dev/null 2>&1');
-            $msg = $err2 . ' The external port was disabled and Apache restarted.';
-            efppLog('ERROR: ' . $msg);
-            return array('success' => false, 'errors' => array($msg), 'messages' => $messages);
+        if (!empty($newlyEnabledMods)) {
+            // a2enmod only loads new modules on a full restart (a graceful
+            // reload ignores them), so restart rather than reload here.
+            $ok2 = false;
+            $r = efppRun('systemctl restart apache2');
+            if ($r['code'] === 0) {
+                $ok2 = true;
+            } else {
+                $r2 = efppRun('apachectl -k restart');
+                if ($r2['code'] === 0) {
+                    $ok2 = true;
+                } else {
+                    $err2 = 'Apache restart failed: ' . $r['output'] . ' ' . $r2['output'];
+                }
+            }
+            if (!$ok2) {
+                efppRun('a2disconf ' . APACHE_CONF_NAME . ' >/dev/null 2>&1');
+                $msg = $err2 . ' The external port was disabled.';
+                efppLog('ERROR: ' . $msg);
+                return array('success' => false, 'errors' => array($msg), 'messages' => $messages);
+            }
+        } else {
+            list($ok2, $err2) = efppReloadApache();
+            if (!$ok2) {
+                // A reload that kills Apache must never leave the FPP web UI down.
+                efppRun('a2disconf ' . APACHE_CONF_NAME . ' >/dev/null 2>&1');
+                efppRun('systemctl restart apache2 >/dev/null 2>&1');
+                $msg = $err2 . ' The external port was disabled and Apache restarted.';
+                efppLog('ERROR: ' . $msg);
+                return array('success' => false, 'errors' => array($msg), 'messages' => $messages);
+            }
         }
         $healthy = efppApacheHealthy($port);
         if ($healthy && $httpsPort > 0 && $httpsPort !== $port) {
