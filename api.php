@@ -27,6 +27,13 @@ define('EFPP_APACHE_CONF_NAME', 'fpp-externalfpp');
 define('EFPP_APACHE_CONF_ENABLED', '/etc/apache2/conf-enabled/fpp-externalfpp.conf');
 define('EFPP_LOG_DIR', getenv('LOGDIR') ?: '/home/fpp/media/logs');
 define('EFPP_LOG_FILE', EFPP_LOG_DIR . '/plugin-fpp-ExternalFPP.log');
+// Must match the Apache vhost (scripts/apply.php). The form-login session cookie
+// is the only identity that is guaranteed reachable from the backend PHP, since
+// the X-Remote-User header forwarded by the external vhost can arrive as the
+// literal string "(null)" when mod_headers runs before mod_auth_form populates
+// REMOTE_USER on proxied requests.
+define('EFPP_SESSION_COOKIE', 'fppefpp');
+define('EFPP_SESSION_REALM', 'FPP External Web Access');
 
 function efppIsRoot() {
     if (function_exists('posix_geteuid')) {
@@ -651,9 +658,29 @@ function efppUsersEndpoint() {
 }
 
 function efppSessionUser() {
-    // Set server-side by Apache on the external port from the session's REMOTE_USER.
+    // Preferred: the username Apache recorded in the session. The external vhost
+    // forwards it as X-Remote-User, but that can arrive as the literal "(null)"
+    // when the header is interpolated before REMOTE_USER is populated.
     $h = trim((string)($_SERVER['HTTP_X_REMOTE_USER'] ?? ''));
-    return $h;
+    if ($h !== '' && $h !== '(null)') {
+        return $h;
+    }
+
+    // Fallback: read the username straight out of the form-login session cookie.
+    // mod_auth_form stores it as "<realm>-user=<username>&<realm>-pw=<password>".
+    if (isset($_COOKIE[EFPP_SESSION_COOKIE])) {
+        $userKey = EFPP_SESSION_REALM . '-user=';
+        foreach (explode('&', (string)$_COOKIE[EFPP_SESSION_COOKIE]) as $pair) {
+            $pair = str_replace('+', ' ', $pair);
+            if (strncmp($pair, $userKey, strlen($userKey)) === 0) {
+                $u = urldecode(trim(substr($pair, strlen($userKey))));
+                if ($u !== '') {
+                    return $u;
+                }
+            }
+        }
+    }
+    return '';
 }
 
 function efppGetSessionUserEndpoint() {
