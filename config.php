@@ -58,7 +58,7 @@ if (file_exists($settingsFile)) {
                         <button type="button" id="efpp_toggle" class="buttons" onclick="efpp.toggle();">
                             <?php echo $enabled ? 'Disable External Access' : 'Enable External Access'; ?>
                         </button>
-                        <?php echo efppHelp('Turns the password-protected port on/off without changing the settings below.'); ?>
+                        <?php echo efppHelp('Turns the password-protected port on/off.'); ?>
                     </td>
                 </tr>
                 <tr>
@@ -82,7 +82,6 @@ if (file_exists($settingsFile)) {
                     <td style="padding: 4px;">
                         <input type="checkbox" id="efpp_enforce_https"
                                <?php echo $enforceHttps ? 'checked' : ''; ?>>
-                        <label for="efpp_enforce_https">Force visitors to use https (redirect from http)</label>
                         <?php echo efppHelp('When checked, both the listen port and the https port redirect to https. When unchecked, http and https work side by side.'); ?>
                     </td>
                 </tr>
