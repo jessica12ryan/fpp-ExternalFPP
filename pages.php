@@ -141,9 +141,16 @@ $changePwContent = efppPageContent($pluginDir, '/www/change-password.html', '/te
                 <p>Minimal working form:</p>
                 <pre>&lt;input type="password" id="pw1" placeholder="New password"&gt;
 &lt;input type="password" id="pw2" placeholder="Confirm new password"&gt;
-&lt;button onclick="submit()"&gt;Change Password&lt;/button&gt;
+&lt;button id="save"&gt;Change Password&lt;/button&gt;
 &lt;script&gt;
-function submit() {
+// Users who do not have to change their password are sent on to the FPP UI.
+fetch("/api/plugin/fpp-ExternalFPP/session-user")
+  .then(function (r) { return r.json(); })
+  .then(function (s) {
+    if (s.success &amp;&amp; !s.must_change) { window.location.replace("/"); }
+  });
+
+document.getElementById("save").addEventListener("click", function () {
   fetch("/api/plugin/fpp-ExternalFPP/change-my-password", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -152,16 +159,25 @@ function submit() {
       password_confirm: document.getElementById("pw2").value
     })
   }).then(function (r) { return r.json(); }).then(function (d) {
-    if (d.success) { window.location.href = "/"; }
-    else { alert((d.errors || []).join(" ")); }
+    if (d.success) {
+      alert("Password updated. Sign in again with the new password.");
+      window.location.replace("/");
+    } else {
+      alert((d.errors || []).join(" "));
+    }
   });
-}
+});
 &lt;/script&gt;</pre>
 
                 <p>Notes:</p>
                 <ul>
+                    <li>Changing the password signs the visitor out (the old session is no longer
+                        valid), so after a successful change the next login uses the new password.</li>
                     <li>The password must be at least 6 characters long and must differ from the current
                         password.</li>
+                    <li>The page should call <code>session-user</code> and forward to <code>/</code> when
+                        <code>must_change</code> is false, otherwise every login would be forced through a
+                        password change.</li>
                     <li>Passwords are stored in the plugin's own password file &mdash; FPP's UI password
                         is never touched.</li>
                     <li>If your page does not call the API, or the API rejects the password, the visitor
