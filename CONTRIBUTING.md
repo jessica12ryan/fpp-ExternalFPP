@@ -167,6 +167,8 @@ vhost on `<port>` that:
 - unsets `Authorization` before proxying so the browser's Basic credentials are never forwarded to
   FPP (which would re-trigger a browser prompt from FPP's own password file);
 - sets `X-Remote-User` from `REMOTE_USER` server-side;
+- forwards the real client IP as `X-Forwarded-For` (server-side) so the plugin can log who logged
+  in, since `REMOTE_ADDR` behind the proxy is always `127.0.0.1`;
 - requires a form login on everything except `login.html`.
 
 `apply.php` also enables the required Apache modules, enables the conf with `a2enconf`, and reloads
@@ -206,8 +208,9 @@ configured user exists in the password file with a valid bcrypt hash.
 ## Logging
 
 All API activity goes to `/home/fpp/media/logs/plugin-fpp-ExternalFPP.log` via `efppLog()`.
-Every successful login is recorded (`SUCCESS Login: <username>`) by the `session-user` endpoint,
-and every password change is recorded with the username (never the password).
+Every successful login is recorded (`SUCCESS Login: <username> from <client-ip>`) by the
+`session-user` endpoint, and every password change is recorded with the username (never the
+password).
 
 ---
 

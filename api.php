@@ -678,7 +678,14 @@ function efppGetSessionUserEndpoint() {
 
     // The session-user endpoint is only called from the change-password page,
     // which is the AuthFormLoginSuccessLocation, so each call marks a login.
-    efppLog('SUCCESS Login: ' . $user);
+    // The real client IP is forwarded by the vhost as X-Forwarded-For (set
+    // server-side by Apache), since the API is reached through the proxy and
+    // REMOTE_ADDR alone would always be 127.0.0.1.
+    $clientIp = trim((string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
+    if ($clientIp === '') {
+        $clientIp = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+    }
+    efppLog('SUCCESS Login: ' . $user . ($clientIp !== '' ? ' from ' . $clientIp : ''));
 
     return json(array('success' => true, 'username' => $user, 'must_change' => $mustChange));
 }

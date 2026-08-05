@@ -272,6 +272,11 @@ function efppBuildApacheConf($port, $backendPort, $htpasswdFile, $loginPageFile,
     $lines[] = '    # client, so it is safe for the API to use for "change my own password".';
     $lines[] = '    RequestHeader unset X-Remote-User';
     $lines[] = '    RequestHeader set X-Remote-User "%{REMOTE_USER}s"';
+    $lines[] = '    # Forward the real client IP to the backend, which the plugin logs on';
+    $lines[] = '    # login (the proxy would otherwise make REMOTE_ADDR look like 127.0.0.1).';
+    $lines[] = '    # Replaced server-side, never trusted from the client.';
+    $lines[] = '    RequestHeader unset X-Forwarded-For';
+    $lines[] = '    RequestHeader set X-Forwarded-For "%{REMOTE_ADDR}s"';
     $lines[] = '';
     $lines[] = '    # Serve the login page directly from the plugin instead of proxying it.';
     $lines[] = '    # The "!" marks the URL as not-proxied so the Alias below can serve it.';
