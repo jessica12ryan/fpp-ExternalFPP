@@ -60,15 +60,22 @@ foreach ($menuEntries as $entry) {
 // Users browsing the normal FPP backend port see neither, so the regular UI is
 // unaffected.
 $efppPort = 0;
+$efppHttpsPort = 0;
 $efppCfg = __DIR__ . '/config/settings.json';
 if (file_exists($efppCfg)) {
 	$efppS = json_decode(@file_get_contents($efppCfg), true);
-	if (is_array($efppS) && !empty($efppS['port'])) {
-		$efppPort = (int)$efppS['port'];
+	if (is_array($efppS)) {
+		if (!empty($efppS['port'])) {
+			$efppPort = (int)$efppS['port'];
+		}
+		if (!empty($efppS['https_port'])) {
+			$efppHttpsPort = (int)$efppS['https_port'];
+		}
 	}
 }
 $efppHostPort = (int)parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_PORT);
 $efppExternal = ($efppPort > 0 && $efppHostPort === $efppPort)
+	|| ($efppHttpsPort > 0 && $efppHostPort === $efppHttpsPort)
 	|| !empty($_SERVER['HTTP_X_REMOTE_USER']);
 
 if ($menu == 'status' && $efppExternal) {

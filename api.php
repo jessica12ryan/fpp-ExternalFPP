@@ -51,6 +51,8 @@ function efppLoadSettings() {
         'enabled' => 0,
         'port' => 8080,
         'backend_port' => 80,
+        'https_port' => 8443,
+        'enforce_https' => 1,
         'users' => array()
     );
     if (!file_exists(EFPP_SETTINGS_FILE)) {
@@ -201,9 +203,19 @@ function efppTcpOpen($host, $port) {
     return false;
 }
 
-function efppHttpRequest($method, $host, $port, $path, $extraHeaders = array(), $body = '') {
+function efppHttpRequest($method, $host, $port, $path, $extraHeaders = array(), $body = '', $https = false) {
     $port = (int)$port;
-    $fp = @fsockopen($host, $port, $errno, $errstr, 3);
+    if ($https) {
+        $fp = @stream_socket_client('ssl://' . $host . ':' . $port, $errno, $errstr, 3,
+            STREAM_CLIENT_CONNECT,
+            stream_context_create(array('ssl' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+                'allow_self_signed' => true
+            ))));
+    } else {
+        $fp = @fsockopen($host, $port, $errno, $errstr, 3);
+    }
     if (!$fp) {
         return array('code' => 0, 'headers' => array(), 'body' => '');
     }
@@ -470,13 +482,17 @@ function efppStatusData() {
         'enabled' => !empty($s['enabled']) ? 1 : 0,
         'port' => $port,
         'backend_port' => $backendPort,
+        'https_port' => (int)($s['https_port'] ?? 8443),
+        'enforce_https' => !empty($s['enforce_https']) ? 1 : 0,
         'users' => $usernames,
         'user_count' => count($usernames),
         'apache_conf_enabled' => file_exists(EFPP_APACHE_CONF_ENABLED) ? 1 : 0,
         'htpasswd_exists' => file_exists(EFPP_HTPASSWD_FILE) ? 1 : 0,
         'login_page' => file_exists(EFPP_LOGIN_PAGE_FILE) ? 1 : 0,
         'listening' => efppTcpOpen('127.0.0.1', $port) ? 1 : 0,
+        'https_listening' => efppTcpOpen('127.0.0.1', (int)($s['https_port'] ?? 8443)) ? 1 : 0,
         'backend_reachable' => efppTcpOpen('127.0.0.1', $backendPort) ? 1 : 0,
+        'ssl_module' => file_exists('/etc/apache2/mods-enabled/ssl.load') ? 1 : 0,
         'fpp_ui_password' => efppFppUiPasswordEnabled() ? 1 : 0,
         'hostname' => php_uname('n')
     );
@@ -505,8 +521,20 @@ function efppValidateData($data, $existing) {
     }
     $clean['backend_port'] = $backendPort;
 
+    $httpsPort = (int)($data['https_port'] ?? $existing['https_port']);
+    if ($httpsPort < 1 || $httpsPort > 65535) {
+        $errors[] = 'HTTPS port must be between 1 and 65535.';
+    }
+    $clean['https_port'] = $httpsPort;
+
+    $enforceHttps = !empty($data['enforce_https']);
+    $clean['enforce_https'] = $enforceHttps ? 1 : 0;
+
     if ($port === $backendPort) {
         $errors[] = 'The listen port and the backend (FPP web) port must be different.';
+    }
+    if ($httpsPort === $port || $httpsPort === $backendPort) {
+        $errors[] = 'The HTTPS port must be different from the listen port and the backend (FPP web) port.';
     }
 
     return array($clean, $errors);
@@ -587,6 +615,8 @@ function efppTestEndpoint() {
     $s = efppLoadSettings();
     $port = (int)$s['port'];
     $backendPort = (int)$s['backend_port'];
+    $httpsPort = (int)($s['https_port'] ?? 8443);
+    $enforceHttps = !empty($s['enforce_https']);
     $users = efppUsersFromSettings($s);
     $testUser = !empty($users) ? $users[0] : null;
 
@@ -597,6 +627,7 @@ function efppTestEndpoint() {
     $results = array();
     $results[] = array('check' => 'Backend FPP web server (port ' . $backendPort . ')', 'ok' => efppTcpOpen('127.0.0.1', $backendPort) ? 1 : 0);
     $results[] = array('check' => 'External port ' . $port . ' listening', 'ok' => efppTcpOpen('127.0.0.1', $port) ? 1 : 0);
+    $results[] = array('check' => 'HTTPS port ' . $httpsPort . ' listening', 'ok' => efppTcpOpen('127.0.0.1', $httpsPort) ? 1 : 0);
 
     $allOk = true;
     foreach ($results as $r) {
@@ -604,13 +635,25 @@ function efppTestEndpoint() {
     }
 
     if ($allOk && $testUser !== null && $testUser['username'] !== '' && $testUser['password'] !== '') {
-        $noAuth = efppHttpRequest('GET', '127.0.0.1', $port, '/');
-        $authRequired = ($noAuth['code'] === 302 || $noAuth['code'] === 401);
-        $results[] = array(
-            'check' => 'No credentials is sent to the login page',
-            'ok' => $authRequired ? 1 : 0,
-            'detail' => 'HTTP ' . $noAuth['code']
-        );
+        if ($enforceHttps) {
+            // Plain-HTTP requests are redirected to HTTPS, so exercise the
+            // HTTPS listener directly (self-signed cert, so no peer verify).
+            $noAuth = efppHttpRequest('GET', '127.0.0.1', $httpsPort, '/', array(), '', true);
+            $authRequired = ($noAuth['code'] === 302 || $noAuth['code'] === 401);
+            $results[] = array(
+                'check' => 'No credentials are sent to the login page (https ' . $httpsPort . ')',
+                'ok' => $authRequired ? 1 : 0,
+                'detail' => 'HTTP ' . $noAuth['code']
+            );
+        } else {
+            $noAuth = efppHttpRequest('GET', '127.0.0.1', $port, '/');
+            $authRequired = ($noAuth['code'] === 302 || $noAuth['code'] === 401);
+            $results[] = array(
+                'check' => 'No credentials are sent to the login page',
+                'ok' => $authRequired ? 1 : 0,
+                'detail' => 'HTTP ' . $noAuth['code']
+            );
+        }
         $userInFile = efppUserInHtpasswd($testUser['username']);
         $results[] = array(
             'check' => 'Configured user is present in the password file',

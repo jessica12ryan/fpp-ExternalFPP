@@ -51,11 +51,14 @@ var efppStatus = {
             dataType: 'json',
             success: function(s) {
                 var host = window.location.hostname;
-                var url = 'http://' + host + ':' + s.port + '/';
+                var scheme = s.enforce_https ? 'https' : 'http';
+                var url = scheme + '://' + host + ':' + (s.enforce_https ? s.https_port : s.port) + '/';
                 var rows = [
                     ['Plugin configured', s.configured ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['External access', s.enabled ? '<span class="text-success">&#9679; Enabled</span>' : '<span class="text-danger">&#9679; Disabled</span>'],
                     ['Listen port', s.port],
+                    ['HTTPS port', s.https_port],
+                    ['Enforce https', s.enforce_https ? '<span class="text-success">Yes</span>' : '<span class="text-secondary">No</span>'],
                     ['Backend (FPP web) port', s.backend_port],
                     ['Users', s.user_count > 0
                         ? s.users.map(escHtml).join(', ')
@@ -65,6 +68,7 @@ var efppStatus = {
                     ['Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Custom login page', s.login_page ? '<span class="text-success">Yes</span>' : '<span class="text-warning">No (default)</span>'],
                     ['External port listening', s.listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
+                    ['HTTPS port listening', s.https_listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Backend FPP web reachable', s.backend_reachable ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['FPP built-in UI password', s.fpp_ui_password ? '<span class="text-warning">Enabled</span>' : '<span class="text-success">Not set</span>'],
                     ['External URL', s.enabled ? '<a href="' + url + '" target="_blank">' + url + '</a>' : '<span class="text-secondary">-</span>']

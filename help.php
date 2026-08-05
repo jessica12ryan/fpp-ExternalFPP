@@ -23,8 +23,9 @@ $pluginDir = __DIR__;
             <h3>What This Plugin Does</h3>
             <p>
                 FPP's web UI is normally served without any password on port 80. This plugin adds a
-                <b>new web address</b> (default <code>8080</code>) that shows the exact same UI but
-                first asks for a <b>username and password</b>. Nothing on the normal port is changed,
+                <b>new web address</b> (default <code>8080</code>, with an HTTPS address on
+                <code>8443</code>) that shows the exact same UI but first asks for a
+                <b>username and password</b>. Nothing on the normal port is changed,
                 so local users keep working exactly as before.
             </p>
 
@@ -33,11 +34,17 @@ $pluginDir = __DIR__;
             <h3>Quick Start</h3>
             <ol>
                 <li>Open <b>Content Setup &rarr; External FPP</b></li>
-                <li>Set a <b>Listen port</b> (e.g. <code>8080</code>)</li>
+                <li>Set a <b>Listen port</b> (e.g. <code>8080</code>) and an <b>HTTPS port</b> (e.g. <code>8443</code>)</li>
                 <li>Add at least one <b>user</b> in the <b>Users</b> tab (username + password)</li>
+                <li>Leave <b>Enforce https</b> checked to redirect everyone to the HTTPS address, or uncheck it to allow plain HTTP as well</li>
                 <li>Click <b>Save &amp; Apply</b>, then use the toggle button to <b>enable</b> the external access</li>
-                <li>Browse to <code>http://&lt;fpp-ip&gt;:8080/</code> &mdash; you will be asked to log in</li>
+                <li>Browse to <code>https://&lt;fpp-ip&gt;:8443/</code> &mdash; you will be asked to log in</li>
             </ol>
+            <p>
+                Because FPP uses a <b>self-signed certificate</b>, your browser will warn you about
+                the connection before the login page loads. This is expected &mdash; click through
+                to continue.
+            </p>
 
             <hr>
 
@@ -78,21 +85,27 @@ $pluginDir = __DIR__;
 
             <hr>
 
-            <h3>Changing the Listen Port</h3>
+            <h3>Changing the Listen / HTTPS Port</h3>
             <p>
-                Change the <b>Listen port</b> in the Config tab and click <b>Save &amp; Apply</b>.
-                Everything updates automatically &mdash; just use your new address from then on.
+                Change the <b>Listen port</b> or <b>HTTPS port</b> in the Config tab and click
+                <b>Save &amp; Apply</b>. Everything updates automatically &mdash; just use your new
+                address from then on. The HTTPS port must be different from the listen port and the
+                backend (FPP web) port.
             </p>
 
             <hr>
 
             <h3>Security Considerations</h3>
             <ul>
-                <li>The extra port uses <b>plain HTTP</b>. The login password is submitted as
-                    plain form data, and the session is tracked with a cookie that stores the
-                    login details in a reversible form. Both can be read by anyone on the
-                    network. Do not expose this port to the public internet &mdash; put it
-                    behind a VPN or a TLS reverse proxy for remote access.</li>
+                <li>With <b>Enforce https</b> on, the extra port is served over <b>TLS</b> using
+                    FPP's built-in self-signed certificate, so login details and cookies are
+                    encrypted in transit. Anyone who connects (to either the HTTP or HTTPS address)
+                    is redirected to the HTTPS port.</li>
+                <li>If you turn <b>Enforce https</b> off, the HTTP port uses <b>plain HTTP</b>:
+                    the login password is submitted as plain form data, and the session is tracked
+                    with a cookie that stores the login details in a reversible form. Both can be
+                    read by anyone on the network. Do not expose the HTTP port to the public
+                    internet &mdash; put it behind a VPN or a TLS reverse proxy for remote access.</li>
                 <li>This plugin provides its own password protection. If FPP's built-in
                     <b>UI Password</b> is also switched on, you may be asked for a second
                     password. The simplest fix is to turn FPP's built-in UI password off
@@ -108,6 +121,8 @@ $pluginDir = __DIR__;
             <ul>
                 <li>Check the <b>Status</b> tab: the <b>Apache vhost enabled</b> and <b>port listening</b>
                     indicators should both be green.</li>
+                <li>If <b>Enforce https</b> is on, the plain-HTTP address redirects to the HTTPS port.
+                    Browse to <code>https://&lt;fpp-ip&gt;:8443/</code>, not <code>:8080</code>.</li>
                 <li>Make sure the port isn't already in use by another service on your FPP.</li>
                 <li>If you changed the port, remember to browse to the <b>new</b> address.</li>
             </ul>

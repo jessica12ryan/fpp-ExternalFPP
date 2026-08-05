@@ -16,12 +16,16 @@ $settingsFile = $pluginDir . '/config/settings.json';
 $enabled = 0;
 $port = 8080;
 $backendPort = 80;
+$httpsPort = 8443;
+$enforceHttps = 1;
 if (file_exists($settingsFile)) {
     $s = json_decode(file_get_contents($settingsFile), true);
     if (is_array($s)) {
         $enabled = !empty($s['enabled']) ? 1 : 0;
         $port = (int)($s['port'] ?? 8080);
         $backendPort = (int)($s['backend_port'] ?? 80);
+        $httpsPort = (int)($s['https_port'] ?? 8443);
+        $enforceHttps = !empty($s['enforce_https']) ? 1 : 0;
     }
 }
 ?>
@@ -63,6 +67,23 @@ if (file_exists($settingsFile)) {
                         <input type="number" id="efpp_port" min="1" max="65535" size="8"
                                value="<?php echo htmlspecialchars($port); ?>">
                         <?php echo efppHelp('The new password-protected port, e.g. 8080.'); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 4px;"><b>HTTPS port:</b></td>
+                    <td style="padding: 4px;">
+                        <input type="number" id="efpp_https_port" min="1" max="65535" size="8"
+                               value="<?php echo htmlspecialchars($httpsPort); ?>">
+                        <?php echo efppHelp('TLS (https) port. The plugin uses FPP\'s built-in self-signed certificate.'); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 4px;"><b>Enforce https:</b></td>
+                    <td style="padding: 4px;">
+                        <input type="checkbox" id="efpp_enforce_https"
+                               <?php echo $enforceHttps ? 'checked' : ''; ?>>
+                        <label for="efpp_enforce_https">Force visitors to use https (redirect from http)</label>
+                        <?php echo efppHelp('When checked, both the listen port and the https port redirect to https. When unchecked, http and https work side by side.'); ?>
                     </td>
                 </tr>
                 <?php if (!empty($efpp_ui_level) && $efpp_ui_level >= 2): ?>
@@ -109,7 +130,10 @@ if (file_exists($settingsFile)) {
                 <li>Anyone who knows the URL of the extra port will be shown a <b>login page</b>. Without valid
                     credentials Apache redirects back to the login page and the UI stays protected.</li>
                 <li>The login page is fully customizable in the <b>Pages</b> tab.</li>
-                <li>The extra port is plain HTTP. Do not expose it directly to the internet &mdash; use a VPN or a TLS-terminating reverse proxy for remote access.</li>
+                <li>The extra port is plain HTTP unless <b>Enforce https</b> is on. When on, visitors are
+                    redirected to the HTTPS port and served over TLS using FPP's built-in self-signed
+                    certificate (your browser will show a certificate warning, which is normal for a
+                    self-signed cert).</li>
                 <li>If FPP's built-in UI Password is also set, access through this port may prompt for that password as well, depending on FPP's configuration.</li>
                 <li>This plugin uses FPP's existing Apache web server &mdash; no additional packages are required.</li>
             </ul>
@@ -152,7 +176,8 @@ var efpp = {
     renderStatus: function(s) {
         efpp.enabled = !!s.enabled;
         var host = window.location.hostname;
-        var url = 'http://' + host + ':' + s.port + '/';
+        var scheme = s.enforce_https ? 'https' : 'http';
+        var url = scheme + '://' + host + ':' + (s.enforce_https ? s.https_port : s.port) + '/';
         $('#efpp_status_text').html(efpp.enabled
             ? '<span class="text-success">&#9679; Enabled</span>'
             : '<span class="text-danger">&#9679; Disabled</span>');
@@ -208,7 +233,9 @@ var efpp = {
             contentType: 'application/json',
             data: JSON.stringify({
                 port: $('#efpp_port').val(),
-                backend_port: $('#efpp_backend_port').val()
+                backend_port: $('#efpp_backend_port').val(),
+                https_port: $('#efpp_https_port').val(),
+                enforce_https: $('#efpp_enforce_https').is(':checked') ? 1 : 0
             }),
             dataType: 'json',
             success: function(data) {

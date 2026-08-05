@@ -58,8 +58,11 @@ FPP's UI with the shared tab bar). The pages you see on the extra port (`login.h
 
 - FPP 8+ (ships with Apache 2.4)
 - Apache modules: `proxy`, `proxy_http`, `headers`, `authn_file`, `auth_form`, `session`,
-  `session_cookie`, `request`, `alias` — all enabled by the install script. `mod_request` is
-  required for `mod_auth_form` to work (without it Apache fails to start with AH02618).
+  `session_cookie`, `request`, `alias`, `ssl`, `rewrite` — all enabled by the install script.
+  `mod_request` is required for `mod_auth_form` to work (without it Apache fails to start with
+  AH02618). `mod_ssl` and `mod_rewrite` are needed for the HTTPS listener. Both modules ship
+  with FPP's Apache; `ssl.load`/`ssl.conf` are already present in `mods-available` but not
+  enabled by default.
 - PHP CLI for `scripts/apply.php`.
 
 ---
@@ -82,7 +85,7 @@ The install script:
 2. If the plugin is a git clone, it does a `git fetch` + hard reset to `origin/main`.
 3. Restores the backed-up config (so an update never loses your users/settings).
 4. Creates a default `settings.json` on fresh installs (`enabled=0`, `port=8080`,
-   `backend_port=80`, no users).
+   `backend_port=80`, `https_port=8443`, `enforce_https=1`, no users).
 5. Fixes ownership/permissions for the `fpp` web user.
 6. Runs `scripts/apply.php` to write the Apache config.
 
@@ -158,8 +161,18 @@ bcrypt.
 
 ## Apache configuration
 
-`scripts/apply.php` generates `/etc/apache2/conf-available/fpp-externalfpp.conf`, containing a
-vhost on `<port>` that:
+`scripts/apply.php` generates `/etc/apache2/conf-available/fpp-externalfpp.conf`, containing two
+listeners (`Listen <port>` and `Listen <https_port>`) and two vhosts:
+
+- a vhost on `<port>` that is either:
+  - a **password-protected reverse proxy** when `enforce_https` is off, or
+  - a **redirect to HTTPS** (`RewriteRule ^(.*)$ https://%1:<https_port>$1 [R=301,L]`, keeping the
+    host and path) when `enforce_https` is on — everything including `login.html` is forwarded;
+- a vhost on `<https_port>` that is always a password-protected reverse proxy with TLS
+  (`SSLEngine on` + `SSLCertificateFile`/`SSLCertificateKeyFile` pointing at FPP's self-signed
+  snakeoil cert `/etc/ssl/certs/ssl-cert-snakeoil.pem`).
+
+The protected vhost body is shared via `efppBuildVhostBody()` (in `scripts/apply.php`) and it:
 
 - proxies everything (`ProxyPass / http://127.0.0.1:<backend_port>/`) with `ProxyPreserveHost On`;
 - keeps `login.html`, `change-password.html`, and `/logout` local (marked `!` so they are not
@@ -171,8 +184,8 @@ vhost on `<port>` that:
   in, since `REMOTE_ADDR` behind the proxy is always `127.0.0.1`;
 - requires a form login on everything except `login.html`.
 
-`apply.php` also enables the required Apache modules, enables the conf with `a2enconf`, and reloads
-Apache. The `conf-enabled` symlink survives reboots.
+`apply.php` also enables the required Apache modules (including `ssl` and `rewrite`), enables the
+conf with `a2enconf`, and reloads Apache. The `conf-enabled` symlink survives reboots.
 
 The uninstall script disables the conf (`a2disconf`) and deletes the Apache conf file.
 
@@ -216,10 +229,12 @@ password).
 
 ## Security model
 
-- **Plain HTTP.** The extra port has no TLS. The login password travels as form data and the
-  session cookie stores credentials in a reversible form (`mod_session_cookie`), so both are
-  readable on the wire. Do not expose the port to untrusted networks directly; terminate TLS in
-  front of it (VPN or reverse proxy).
+- **TLS is optional but on by default.** When `enforce_https` is on, both listeners redirect to
+  the HTTPS port and traffic is encrypted with FPP's self-signed snakeoil certificate
+  (`/etc/ssl/certs/ssl-cert-snakeoil.pem`). When it is off, the extra port has no TLS: the login
+  password travels as form data and the session cookie stores credentials in a reversible form
+  (`mod_session_cookie`), so both are readable on the wire. Do not expose an unencrypted port to
+  untrusted networks directly; terminate TLS in front of it (VPN or reverse proxy).
 - **Hashed passwords.** No plaintext is stored in `settings.json` or the password file. Passwords
   are bcrypt via PHP's `password_hash`.
 - **Header trust.** `X-Remote-User` is *replaced server-side* by Apache and never trusted from the
@@ -230,6 +245,10 @@ password).
   time. If you point `backend_port` at FPP's secure port (`8080`, configured by
   `secure-port-config.conf`), that vhost has **no** local exception and users *will* be prompted —
   don't point `backend_port` at it.
+- **Self-signed cert caveat.** The snakeoil certificate is not signed by a public CA, so browsers
+  show a certificate warning. Given the plugin proxies to FPP over the loopback interface only,
+  this is acceptable; for a trust chain you would instead point `SSLCertificateFile`/`KeyFile`
+  at your own cert in `scripts/apply.php` and put the traffic behind your own reverse proxy.
 
 ---
 
@@ -265,6 +284,21 @@ If Apache fails to start with `AH02618` after an install, `mod_request` is missi
 sudo a2enmod request
 sudo systemctl reload apache2
 ```
+
+If Apache fails to start when `enforce_https` is on, `mod_ssl` may be missing or the snakeoil
+certificate absent:
+
+```bash
+sudo a2enmod ssl
+ls -l /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/ssl/private/ssl-cert-snakeoil.key
+sudo systemctl reload apache2
+```
+
+### Common failure: HTTPS not reachable after upgrade
+
+When `enforce_https` was off and you re-apply, both vhosts are written, so the HTTPS port should
+answer. If the HTTPS port isn't listening, confirm the conf was regenerated (re-run
+`php scripts/apply.php`) and that nothing else binds the HTTPS port.
 
 ### Common failure: "sent back to login page with the right password"
 
