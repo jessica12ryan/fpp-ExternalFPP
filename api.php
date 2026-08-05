@@ -52,7 +52,8 @@ function efppLoadSettings() {
         'port' => 8080,
         'backend_port' => 80,
         'https_port' => 8443,
-        'enforce_https' => 1,
+        'enable_http' => 1,
+        'enable_https' => 1,
         'users' => array()
     );
     if (!file_exists(EFPP_SETTINGS_FILE)) {
@@ -483,7 +484,8 @@ function efppStatusData() {
         'port' => $port,
         'backend_port' => $backendPort,
         'https_port' => (int)($s['https_port'] ?? 8443),
-        'enforce_https' => !empty($s['enforce_https']) ? 1 : 0,
+        'enable_http' => !empty($s['enable_http'] ?? 1) ? 1 : 0,
+        'enable_https' => !empty($s['enable_https'] ?? 1) ? 1 : 0,
         'users' => $usernames,
         'user_count' => count($usernames),
         'apache_conf_enabled' => file_exists(EFPP_APACHE_CONF_ENABLED) ? 1 : 0,
@@ -511,7 +513,7 @@ function efppValidateData($data, $existing) {
 
     $port = (int)($data['port'] ?? $existing['port']);
     if ($port < 1 || $port > 65535) {
-        $errors[] = 'Listen port must be between 1 and 65535.';
+        $errors[] = 'HTTP port must be between 1 and 65535.';
     }
     $clean['port'] = $port;
 
@@ -527,14 +529,23 @@ function efppValidateData($data, $existing) {
     }
     $clean['https_port'] = $httpsPort;
 
-    $enforceHttps = !empty($data['enforce_https']);
-    $clean['enforce_https'] = $enforceHttps ? 1 : 0;
+    $clean['enable_http'] = !empty($data['enable_http']) ? 1 : 0;
+    $clean['enable_https'] = !empty($data['enable_https']) ? 1 : 0;
 
-    if ($port === $backendPort) {
-        $errors[] = 'The listen port and the backend (FPP web) port must be different.';
-    }
-    if ($httpsPort === $port || $httpsPort === $backendPort) {
-        $errors[] = 'The HTTPS port must be different from the listen port and the backend (FPP web) port.';
+    if ($clean['enable_http'] && $clean['enable_https']) {
+        if ($httpsPort === $port || $httpsPort === $backendPort) {
+            $errors[] = 'The HTTP port and the HTTPS port must be different, and the HTTPS port must differ from the backend (FPP web) port.';
+        }
+    } elseif ($clean['enable_https']) {
+        if ($httpsPort === $backendPort) {
+            $errors[] = 'The HTTPS port must be different from the backend (FPP web) port.';
+        }
+    } elseif ($clean['enable_http']) {
+        if ($port === $backendPort) {
+            $errors[] = 'The HTTP port and the backend (FPP web) port must be different.';
+        }
+    } else {
+        $errors[] = 'At least one of "Enable HTTP port" or "Enable HTTPS port" must be checked.';
     }
 
     return array($clean, $errors);
@@ -581,7 +592,7 @@ function efppSetEnabled($enabled) {
         $errors[] = 'Create at least one user in the Users tab before enabling the plugin.';
     }
     if ($enabled && ((int)$s['port'] < 1 || (int)$s['port'] > 65535 || (int)$s['port'] === (int)$s['backend_port'])) {
-        $errors[] = 'Configure a valid listen port in the Config tab before enabling the plugin.';
+        $errors[] = 'Configure a valid HTTP port in the Config tab before enabling the plugin.';
     }
 
     if (!empty($errors)) {
@@ -616,7 +627,8 @@ function efppTestEndpoint() {
     $port = (int)$s['port'];
     $backendPort = (int)$s['backend_port'];
     $httpsPort = (int)($s['https_port'] ?? 8443);
-    $enforceHttps = !empty($s['enforce_https']);
+    $enableHttp = !empty($s['enable_http'] ?? 1);
+    $enableHttps = !empty($s['enable_https'] ?? 1);
     $users = efppUsersFromSettings($s);
     $testUser = !empty($users) ? $users[0] : null;
 
@@ -626,8 +638,12 @@ function efppTestEndpoint() {
 
     $results = array();
     $results[] = array('check' => 'Backend FPP web server (port ' . $backendPort . ')', 'ok' => efppTcpOpen('127.0.0.1', $backendPort) ? 1 : 0);
-    $results[] = array('check' => 'External port ' . $port . ' listening', 'ok' => efppTcpOpen('127.0.0.1', $port) ? 1 : 0);
-    $results[] = array('check' => 'HTTPS port ' . $httpsPort . ' listening', 'ok' => efppTcpOpen('127.0.0.1', $httpsPort) ? 1 : 0);
+    if ($enableHttp) {
+        $results[] = array('check' => 'HTTP port ' . $port . ' listening', 'ok' => efppTcpOpen('127.0.0.1', $port) ? 1 : 0);
+    }
+    if ($enableHttps) {
+        $results[] = array('check' => 'HTTPS port ' . $httpsPort . ' listening', 'ok' => efppTcpOpen('127.0.0.1', $httpsPort) ? 1 : 0);
+    }
 
     $allOk = true;
     foreach ($results as $r) {
@@ -635,9 +651,9 @@ function efppTestEndpoint() {
     }
 
     if ($allOk && $testUser !== null && $testUser['username'] !== '' && $testUser['password'] !== '') {
-        if ($enforceHttps) {
-            // Plain-HTTP requests are redirected to HTTPS, so exercise the
-            // HTTPS listener directly (self-signed cert, so no peer verify).
+        if ($enableHttps) {
+            // If HTTPS is enabled, check the login redirect on the HTTPS
+            // listener (self-signed cert, so no peer verify).
             $noAuth = efppHttpRequest('GET', '127.0.0.1', $httpsPort, '/', array(), '', true);
             $authRequired = ($noAuth['code'] === 302 || $noAuth['code'] === 401);
             $results[] = array(

@@ -48,8 +48,8 @@ For advanced users who prefer the command line, see [CONTRIBUTING.md](CONTRIBUTI
 
 1. In FPP, go to **Content Setup → External FPP**.
 2. Open the **Users** tab and add at least one user (a username and password).
-3. Open the **Config** tab and pick a **Listen Port** (the default `8080` is usually fine).
-4. **Enforce https** is on by default, which sends everyone to the HTTPS port (`8443` by default) using FPP's built-in self-signed certificate. Uncheck it if you'd rather use plain HTTP.
+3. Open the **Config** tab. By default both the **HTTP port** and the **HTTPS port** are enabled (defaults `8080` and `8443`).
+4. If you want to force HTTPS only, uncheck **Enable HTTP port**. If you'd rather use only plain HTTP, uncheck **Enable HTTPS port**.
 5. Click **Save & Apply**.
 6. Click the button to **enable** external access.
 
@@ -59,7 +59,7 @@ Now browse to:
 https://<your-fpp-ip>:8443/
 ```
 
-(or `http://<your-fpp-ip>:8080/` if you turned **Enforce https** off).
+(or `http://<your-fpp-ip>:8080/` if you left only the HTTP port enabled).
 
 You'll see a login page. Enter the username and password you created to reach the FPP dashboard.
 
@@ -106,7 +106,7 @@ This removes your login and returns you to the login page.
 
 - Check the **Status** tab — the "Apache vhost enabled" and "port listening" indicators should both be green.
 - Make sure the port isn't already used by something else on your network.
-- **Enforce https** redirects the plain-HTTP port to the HTTPS port, so bookmark `https://<your-fpp-ip>:8443/` and not `:8080`.
+- If only the **HTTPS port** is enabled, use `https://<your-fpp-ip>:8443/` and not `:8080`.
 
 ### "I still get asked for a password after logging in"
 
@@ -115,7 +115,7 @@ This removes your login and returns you to the login page.
 
 ### "Is my password safe?"
 
-With **Enforce https** on, the extra port is served over TLS using FPP's built-in self-signed certificate and the login details are encrypted in transit. If you turn it off, the port uses plain HTTP and login details are carried in the session cookie — don't share that port with the public internet, and put it behind a VPN or an encrypted reverse proxy for remote access. See [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+With only the **HTTPS port** enabled, the extra port is served over TLS using FPP's built-in self-signed certificate and the login details are encrypted in transit. If the HTTP port is also enabled, then both listeners work; the HTTP listener carries login details in the session cookie — don't share that port with the public internet, and put it behind a VPN or an encrypted reverse proxy for remote access. See [SECURITY.md](SECURITY.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ---
 

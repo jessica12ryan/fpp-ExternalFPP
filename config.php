@@ -17,7 +17,8 @@ $enabled = 0;
 $port = 8080;
 $backendPort = 80;
 $httpsPort = 8443;
-$enforceHttps = 1;
+$enableHttp = 1;
+$enableHttps = 1;
 if (file_exists($settingsFile)) {
     $s = json_decode(file_get_contents($settingsFile), true);
     if (is_array($s)) {
@@ -25,7 +26,8 @@ if (file_exists($settingsFile)) {
         $port = (int)($s['port'] ?? 8080);
         $backendPort = (int)($s['backend_port'] ?? 80);
         $httpsPort = (int)($s['https_port'] ?? 8443);
-        $enforceHttps = !empty($s['enforce_https']) ? 1 : 0;
+        $enableHttp = !empty($s['enable_http'] ?? 1) ? 1 : 0;
+        $enableHttps = !empty($s['enable_https'] ?? 1) ? 1 : 0;
     }
 }
 ?>
@@ -62,11 +64,27 @@ if (file_exists($settingsFile)) {
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding: 4px;"><b>Listen port:</b></td>
+                    <td style="padding: 4px;"><b>Enable HTTP port:</b></td>
+                    <td style="padding: 4px;">
+                        <input type="checkbox" id="efpp_enable_http"
+                               <?php echo $enableHttp ? 'checked' : ''; ?>>
+                        <?php echo efppHelp('When checked, the HTTP port below is served over plain HTTP.'); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 4px;"><b>HTTP port:</b></td>
                     <td style="padding: 4px;">
                         <input type="number" id="efpp_port" min="1" max="65535" size="8"
                                value="<?php echo htmlspecialchars($port); ?>">
-                        <?php echo efppHelp('The new password-protected port, e.g. 8080.'); ?>
+                        <?php echo efppHelp('HTTP port.'); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 4px;"><b>Enable HTTPS port:</b></td>
+                    <td style="padding: 4px;">
+                        <input type="checkbox" id="efpp_enable_https"
+                               <?php echo $enableHttps ? 'checked' : ''; ?>>
+                        <?php echo efppHelp('When checked, the HTTPS port below is served over TLS using FPP\'s built-in self-signed certificate.'); ?>
                     </td>
                 </tr>
                 <tr>
@@ -77,17 +95,9 @@ if (file_exists($settingsFile)) {
                         <?php echo efppHelp('TLS (https) port. The plugin uses FPP\'s built-in self-signed certificate.'); ?>
                     </td>
                 </tr>
-                <tr>
-                    <td style="padding: 4px;"><b>Enforce https:</b></td>
-                    <td style="padding: 4px;">
-                        <input type="checkbox" id="efpp_enforce_https"
-                               <?php echo $enforceHttps ? 'checked' : ''; ?>>
-                        <?php echo efppHelp('When checked, both the listen port and the https port redirect to https. When unchecked, http and https work side by side.'); ?>
-                    </td>
-                </tr>
                 <?php if (!empty($efpp_ui_level) && $efpp_ui_level >= 2): ?>
                 <tr>
-                    <td style="padding: 4px;"><b>Backend port (FPP web):</b></td>
+                    <td style="padding: 4px;"><i class="fas fa-fw fa-flask ui-level-2"></i> <b>Backend port (FPP web):</b></td>
                     <td style="padding: 4px;">
                         <input type="number" id="efpp_backend_port" min="1" max="65535" size="8"
                                value="<?php echo htmlspecialchars($backendPort); ?>">
@@ -129,10 +139,10 @@ if (file_exists($settingsFile)) {
                 <li>Anyone who knows the URL of the extra port will be shown a <b>login page</b>. Without valid
                     credentials Apache redirects back to the login page and the UI stays protected.</li>
                 <li>The login page is fully customizable in the <b>Pages</b> tab.</li>
-                <li>The extra port is plain HTTP unless <b>Enforce https</b> is on. When on, visitors are
-                    redirected to the HTTPS port and served over TLS using FPP's built-in self-signed
-                    certificate (your browser will show a certificate warning, which is normal for a
-                    self-signed cert).</li>
+                <li>Enable the <b>HTTP port</b> and/or the <b>HTTPS port</b>. When HTTPS is enabled, the port is
+                    served over TLS using FPP's built-in self-signed certificate (your browser will show a
+                    certificate warning, which is normal for a self-signed cert). To force HTTPS, enable only
+                    the HTTPS port.</li>
                 <li>If FPP's built-in UI Password is also set, access through this port may prompt for that password as well, depending on FPP's configuration.</li>
                 <li>This plugin uses FPP's existing Apache web server &mdash; no additional packages are required.</li>
             </ul>
@@ -175,13 +185,17 @@ var efpp = {
     renderStatus: function(s) {
         efpp.enabled = !!s.enabled;
         var host = window.location.hostname;
-        var scheme = s.enforce_https ? 'https' : 'http';
-        var url = scheme + '://' + host + ':' + (s.enforce_https ? s.https_port : s.port) + '/';
+        var scheme = s.enable_https ? 'https' : 'http';
+        var uport = s.enable_https ? s.https_port : s.port;
+        var url = scheme + '://' + host + ':' + uport + '/';
+        if (!s.enable_http && !s.enable_https) {
+            url = null;
+        }
         $('#efpp_status_text').html(efpp.enabled
             ? '<span class="text-success">&#9679; Enabled</span>'
             : '<span class="text-danger">&#9679; Disabled</span>');
         $('#efpp_toggle').html(efpp.enabled ? 'Disable External Access' : 'Enable External Access');
-        $('#efpp_url_cell').html(efpp.enabled
+        $('#efpp_url_cell').html(efpp.enabled && url
             ? '<a href="' + url + '" target="_blank">' + url + '</a>'
             : '<span class="text-secondary">Enabled to see URL</span>');
     },
@@ -234,7 +248,8 @@ var efpp = {
                 port: $('#efpp_port').val(),
                 backend_port: $('#efpp_backend_port').val(),
                 https_port: $('#efpp_https_port').val(),
-                enforce_https: $('#efpp_enforce_https').is(':checked') ? 1 : 0
+                enable_http: $('#efpp_enable_http').is(':checked') ? 1 : 0,
+                enable_https: $('#efpp_enable_https').is(':checked') ? 1 : 0
             }),
             dataType: 'json',
             success: function(data) {

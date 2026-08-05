@@ -280,6 +280,11 @@ var efppPages = {
     }
 };
 
+function escHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 $(document).ready(function() {
     $.ajax({
         url: efppPages.apiBase + '/status',

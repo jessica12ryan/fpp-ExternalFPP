@@ -52,7 +52,7 @@ foreach ($menuEntries as $entry) {
 
 // Only show the Logout item when the visitor is actually using the external
 // (password-protected) port. Two signals identify that:
-//   1. The Host header carries the plugin's configured listen port. Pages on
+//   1. The Host header carries the plugin's configured HTTP or HTTPS port. Pages on
 //      the external port can only be seen once logged in (everything is
 //      protected), and the external vhost preserves the Host header when
 //      proxying to the FPP backend.
