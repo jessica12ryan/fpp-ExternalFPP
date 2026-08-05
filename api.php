@@ -20,6 +20,9 @@ define('EFPP_LOGIN_PAGE_DIR', EFPP_PLUGIN_DIR . '/www');
 define('EFPP_LOGIN_PAGE_FILE', EFPP_LOGIN_PAGE_DIR . '/login.html');
 define('EFPP_LOGIN_PAGE_TEMPLATE', EFPP_PLUGIN_DIR . '/templates/login.html');
 define('EFPP_LOGIN_PAGE_URL', '/login.html');
+define('EFPP_CHANGE_PW_FILE', EFPP_LOGIN_PAGE_DIR . '/change-password.html');
+define('EFPP_CHANGE_PW_TEMPLATE', EFPP_PLUGIN_DIR . '/templates/change-password.html');
+define('EFPP_CHANGE_PW_URL', '/change-password.html');
 define('EFPP_APACHE_CONF_NAME', 'fpp-externalfpp');
 define('EFPP_APACHE_CONF_ENABLED', '/etc/apache2/conf-enabled/fpp-externalfpp.conf');
 define('EFPP_LOG_DIR', getenv('LOGDIR') ?: '/home/fpp/media/logs');
@@ -72,7 +75,8 @@ function efppUsersFromSettings($s) {
         if (is_array($u) && isset($u['username']) && trim((string)$u['username']) !== '') {
             $users[] = array(
                 'username' => trim((string)$u['username']),
-                'password' => (string)($u['password'] ?? '')
+                'password' => (string)($u['password'] ?? ''),
+                'must_change' => !empty($u['must_change']) ? 1 : 0
             );
         }
     }
@@ -364,14 +368,104 @@ function efppSaveLoginPageEndpoint() {
 }
 
 function efppResetLoginPageEndpoint() {
+    return efppResetPage(EFPP_LOGIN_PAGE_FILE, 'efppDefaultLoginPage', 'login page');
+}
+
+function efppDefaultChangePasswordPage() {
+    if (file_exists(EFPP_CHANGE_PW_TEMPLATE)) {
+        $c = @file_get_contents(EFPP_CHANGE_PW_TEMPLATE);
+        if (is_string($c) && $c !== '') {
+            return $c;
+        }
+    }
+    return '<!DOCTYPE html><html><body style="font-family:sans-serif;background:#1c1e21;color:#eee;text-align:center;padding:60px;">'
+        . '<h1>Change Password</h1>'
+        . '<p id="efpp_message">Please set a new password.</p>'
+        . '<input type="password" id="efpp_password" placeholder="New password"><br><br>'
+        . '<input type="password" id="efpp_password_confirm" placeholder="Confirm new password"><br><br>'
+        . '<button onclick="efppSubmit()">Change Password</button>'
+        . '<script>'
+        . 'function efppSubmit(){var p=document.getElementById("efpp_password").value,c=document.getElementById("efpp_password_confirm").value;'
+        . 'fetch("/api/plugin/fpp-ExternalFPP/change-my-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:p,password_confirm:c})})'
+        . '.then(function(r){return r.json();}).then(function(d){if(d.success){window.location.href="/";}else{document.getElementById("efpp_message").textContent=(d.errors||[]).join(" ");}});}'
+        . '</script></body></html>';
+}
+
+function efppChangePasswordPageContent() {
+    if (file_exists(EFPP_CHANGE_PW_FILE)) {
+        $c = @file_get_contents(EFPP_CHANGE_PW_FILE);
+        if (is_string($c)) {
+            return $c;
+        }
+    }
+    return efppDefaultChangePasswordPage();
+}
+
+function efppValidateChangePasswordPage($content) {
+    if ($content === '') {
+        return array(array('The change password page cannot be empty.'), array());
+    }
+    $warnings = array();
+    if (!preg_match('/password[\'\"]?\s*=/i', $content)) {
+        $warnings[] = 'The page should submit a JSON payload with a password field (see the required code below).';
+    }
+    if (!preg_match('/"password_confirm"/', $content) && !preg_match("/'password_confirm'/", $content)) {
+        $warnings[] = 'The page should submit a password_confirm field alongside the password.';
+    }
+    if (!preg_match('#change-my-password#', $content)) {
+        $warnings[] = 'The page must post to the plugin API endpoint /api/plugin/fpp-ExternalFPP/change-my-password.';
+    }
+    return array(array(), $warnings);
+}
+
+function efppGetChangePasswordPageEndpoint() {
+    return json(array('success' => true, 'content' => efppChangePasswordPageContent()));
+}
+
+function efppSaveChangePasswordPageEndpoint() {
+    return efppSavePage(EFPP_CHANGE_PW_FILE, 'efppValidateChangePasswordPage', 'change password page');
+}
+
+function efppResetChangePasswordPageEndpoint() {
+    return efppResetPage(EFPP_CHANGE_PW_FILE, 'efppDefaultChangePasswordPage', 'change password page');
+}
+
+function efppSavePage($file, $validatorFn, $label) {
+    $data = $_POST;
+    if (empty($data)) {
+        $raw = json_decode(file_get_contents('php://input'), true);
+        if (is_array($raw)) $data = $raw;
+    }
+    $content = $data['content'] ?? null;
+    if (!is_string($content)) {
+        return json(array('success' => false, 'messages' => array(), 'warnings' => array(), 'errors' => array('No page content received.')));
+    }
+
+    list($errors, $warnings) = call_user_func($validatorFn, $content);
+
     if (!is_dir(EFPP_LOGIN_PAGE_DIR)) {
         @mkdir(EFPP_LOGIN_PAGE_DIR, 0775, true);
     }
-    if (@file_put_contents(EFPP_LOGIN_PAGE_FILE, efppDefaultLoginPage()) === false) {
-        return json(array('success' => false, 'messages' => array(), 'warnings' => array(), 'errors' => array('Could not write the login page. Check file permissions.')));
+    if (@file_put_contents($file, $content) === false) {
+        $errors[] = 'Could not write the ' . $label . ' to ' . $file . '. Check file permissions.';
     }
-    efppLog('Login page reset to default');
-    return json(array('success' => true, 'messages' => array('Login page reset to the default template.'), 'warnings' => array(), 'errors' => array()));
+
+    if (!empty($errors)) {
+        return json(array('success' => false, 'messages' => array(), 'warnings' => $warnings, 'errors' => $errors));
+    }
+    efppLog(ucfirst($label) . ' saved');
+    return json(array('success' => true, 'messages' => array(ucfirst($label) . ' saved.'), 'warnings' => $warnings, 'errors' => array()));
+}
+
+function efppResetPage($file, $defaultFn, $label) {
+    if (!is_dir(EFPP_LOGIN_PAGE_DIR)) {
+        @mkdir(EFPP_LOGIN_PAGE_DIR, 0775, true);
+    }
+    if (@file_put_contents($file, call_user_func($defaultFn)) === false) {
+        return json(array('success' => false, 'messages' => array(), 'warnings' => array(), 'errors' => array('Could not write the ' . $label . '. Check file permissions.')));
+    }
+    efppLog(ucfirst($label) . ' reset to default');
+    return json(array('success' => true, 'messages' => array(ucfirst($label) . ' reset to the default template.'), 'warnings' => array(), 'errors' => array()));
 }
 
 function efppStatusData() {
@@ -549,12 +643,84 @@ function efppTestEndpoint() {
 
 function efppUsersEndpoint() {
     $s = efppLoadSettings();
-    $users = efppUsersFromSettings($s);
-    $usernames = array();
-    foreach ($users as $u) {
-        $usernames[] = $u['username'];
+    $userList = array();
+    foreach (efppUsersFromSettings($s) as $u) {
+        $userList[] = array('username' => $u['username'], 'must_change' => !empty($u['must_change']) ? 1 : 0);
     }
-    return json(array('success' => true, 'users' => $usernames, 'enabled' => !empty($s['enabled']) ? 1 : 0));
+    return json(array('success' => true, 'users' => $userList, 'enabled' => !empty($s['enabled']) ? 1 : 0));
+}
+
+function efppSessionUser() {
+    // Set server-side by Apache on the external port from the session's REMOTE_USER.
+    $h = trim((string)($_SERVER['HTTP_X_REMOTE_USER'] ?? ''));
+    return $h;
+}
+
+function efppGetSessionUserEndpoint() {
+    $user = efppSessionUser();
+    if ($user === '') {
+        return json(array('success' => false, 'errors' => array('Session user not available on this connection.')));
+    }
+    $mustChange = 0;
+    foreach (efppUsersList() as $u) {
+        if (strcasecmp($u['username'], $user) === 0) {
+            $mustChange = !empty($u['must_change']) ? 1 : 0;
+            break;
+        }
+    }
+    return json(array('success' => true, 'username' => $user, 'must_change' => $mustChange));
+}
+
+function efppChangeMyPasswordEndpoint() {
+    $data = efppRequestData();
+    $user = efppSessionUser();
+    if ($user === '') {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('Session user not available. Log in first.')));
+    }
+
+    $password = (string)($data['password'] ?? '');
+    $confirm = (string)($data['password_confirm'] ?? '');
+
+    $s = efppLoadSettings();
+    $users = efppUsersFromSettings($s);
+    $found = -1;
+    foreach ($users as $i => $u) {
+        if (strcasecmp($u['username'], $user) === 0) {
+            $found = $i;
+            break;
+        }
+    }
+    if ($found < 0) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('User not found: ' . $user)));
+    }
+
+    $errors = array();
+    if (strlen($password) < 6) {
+        $errors[] = 'New password must be at least 6 characters long.';
+    }
+    if ($password !== $confirm) {
+        $errors[] = 'Password and confirmation do not match.';
+    }
+    if ($password === $users[$found]['password']) {
+        $errors[] = 'The new password must be different from the current one.';
+    }
+    if (!empty($errors)) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => $errors));
+    }
+
+    $users[$found]['password'] = $password;
+    $users[$found]['must_change'] = 0;
+    if (efppSaveSettingsFile(array_merge($s, array('users' => $users))) === false) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('Could not write the settings file. Check file permissions.')));
+    }
+
+    list($ok, $msg) = efppWriteHtpasswd($users);
+    if (!$ok) {
+        efppSaveSettingsFile($s);
+        return json(array('success' => false, 'messages' => array(), 'errors' => array($msg)));
+    }
+    efppLog('User changed own password: ' . $user);
+    return json(array('success' => true, 'messages' => array('Password changed. Continue to the FPP web UI.'), 'errors' => array()));
 }
 
 function efppRequestData() {
@@ -578,7 +744,7 @@ function efppAddUserEndpoint() {
         return json(array('success' => false, 'messages' => array(), 'errors' => $errors));
     }
 
-    $users[] = array('username' => $username, 'password' => $password);
+    $users[] = array('username' => $username, 'password' => $password, 'must_change' => !empty($data['must_change']) ? 1 : 0);
     if (efppSaveSettingsFile(array_merge(efppLoadSettings(), array('users' => $users))) === false) {
         return json(array('success' => false, 'messages' => array(), 'errors' => array('Could not write the settings file. Check file permissions.')));
     }
@@ -616,6 +782,7 @@ function efppSetPasswordEndpoint() {
     foreach ($users as $i => $u) {
         if (strcasecmp($u['username'], $username) === 0) {
             $users[$i]['password'] = $password;
+            $users[$i]['must_change'] = !empty($data['must_change']) ? 1 : 0;
             break;
         }
     }
@@ -743,11 +910,16 @@ function getEndpointsfppExternalFPP() {
     $result[] = array('method' => 'POST', 'endpoint' => 'add-user', 'callback' => 'efppAddUserEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'set-user-password', 'callback' => 'efppSetPasswordEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'delete-user', 'callback' => 'efppDeleteUserEndpoint');
+    $result[] = array('method' => 'GET', 'endpoint' => 'session-user', 'callback' => 'efppGetSessionUserEndpoint');
+    $result[] = array('method' => 'POST', 'endpoint' => 'change-my-password', 'callback' => 'efppChangeMyPasswordEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'logs', 'callback' => 'efppLogsEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'icon', 'callback' => 'efppIconEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'login-page', 'callback' => 'efppLoginPageEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'save-login-page', 'callback' => 'efppSaveLoginPageEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'reset-login-page', 'callback' => 'efppResetLoginPageEndpoint');
+    $result[] = array('method' => 'GET', 'endpoint' => 'change-password-page', 'callback' => 'efppGetChangePasswordPageEndpoint');
+    $result[] = array('method' => 'POST', 'endpoint' => 'save-change-password-page', 'callback' => 'efppSaveChangePasswordPageEndpoint');
+    $result[] = array('method' => 'POST', 'endpoint' => 'reset-change-password-page', 'callback' => 'efppResetChangePasswordPageEndpoint');
 
     return $result;
 }

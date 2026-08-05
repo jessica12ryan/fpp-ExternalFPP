@@ -55,41 +55,13 @@ include __DIR__ . '/tabs.inc';
                 <tr>
                     <td style="padding: 4px;"></td>
                     <td style="padding: 4px;">
-                        <input type="button" class="buttons" value="Add User" onclick="efppUsers.add();">
-                    </td>
-                </tr>
-            </table>
-        </div>
-    </fieldset>
-
-    <br />
-
-    <fieldset class="border p-3">
-        <legend>Change Password</legend>
-        <div class="p-3">
-            <table>
-                <tr>
-                    <td style="padding: 4px;"><b>User:</b></td>
-                    <td style="padding: 4px;">
-                        <select id="efpp_cp_user"></select>
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 4px;"><b>New password:</b></td>
-                    <td style="padding: 4px;">
-                        <input type="password" id="efpp_cp_password" size="30" autocomplete="new-password">
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 4px;"><b>Confirm new password:</b></td>
-                    <td style="padding: 4px;">
-                        <input type="password" id="efpp_cp_confirm" size="30" autocomplete="new-password">
+                        <label><input type="checkbox" id="efpp_new_must_change"> Require password change at next login</label>
                     </td>
                 </tr>
                 <tr>
                     <td style="padding: 4px;"></td>
                     <td style="padding: 4px;">
-                        <input type="button" class="buttons" value="Change Password" onclick="efppUsers.changePassword();">
+                        <input type="button" class="buttons" value="Add User" onclick="efppUsers.add();">
                     </td>
                 </tr>
             </table>
@@ -97,11 +69,70 @@ include __DIR__ . '/tabs.inc';
     </fieldset>
 </div>
 
+<div id="efpp_change_modal" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Change Password &mdash; <span id="efpp_cp_title"></span></h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <table>
+                    <tr>
+                        <td style="padding: 4px;"><b>New password:</b></td>
+                        <td style="padding: 4px;">
+                            <input type="password" id="efpp_cp_password" size="30" autocomplete="new-password">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 4px;"><b>Confirm new password:</b></td>
+                        <td style="padding: 4px;">
+                            <input type="password" id="efpp_cp_confirm" size="30" autocomplete="new-password">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 4px;"></td>
+                        <td style="padding: 4px;">
+                            <label><input type="checkbox" id="efpp_cp_must_change"> Require password change at next login</label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 4px;"></td>
+                        <td style="padding: 4px;">
+                            <div id="efpp_cp_result"></div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <input type="button" class="buttons" value="Cancel" data-dismiss="modal">
+                <input type="button" class="buttons" value="Save" onclick="efppUsers.changePassword();">
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 var efppUsers = {
     apiBase: 'api/plugin/fpp-ExternalFPP',
     enabled: false,
     users: [],
+    editing: '',
+    cpTimer: null,
+
+    showCpResult: function(data) {
+        var html = '';
+        if (data.errors && data.errors.length > 0) {
+            html += '<span class="text-danger"><b>Errors:</b><br>' + data.errors.map(escHtml).join('<br>') + '</span>';
+        }
+        if (data.messages && data.messages.length > 0) {
+            html += '<span class="text-success"><b>' + (data.success ? 'OK' : 'Notes') + ':</b><br>' + data.messages.map(escHtml).join('<br>') + '</span>';
+        }
+        $('#efpp_cp_result').html(html);
+        if (data.success) {
+            setTimeout(function() { $('#efpp_change_modal').modal('hide'); }, 1000);
+        }
+    },
 
     handleResponse: function(data) {
         var html = '';
@@ -116,6 +147,9 @@ var efppUsers = {
         }
         $('#efpp_users_result').html(html);
         efppUsers.refresh();
+        if (data.success) {
+            setTimeout(function() { $('#efpp_users_result').html(''); }, 4000);
+        }
     },
 
     render: function(d) {
@@ -123,15 +157,19 @@ var efppUsers = {
         efppUsers.users = d.users || [];
 
         var html = '<table class="fppTable" style="width:auto;">';
-        html += '<tr><th style="padding:4px;text-align:left;">Username</th><th style="padding:4px;"></th></tr>';
+        html += '<tr><th style="padding:4px;text-align:left;">Username</th><th style="padding:4px;text-align:left;">Status</th><th style="padding:4px;"></th></tr>';
         if (efppUsers.users.length === 0) {
-            html += '<tr><td colspan="2"><span class="text-danger">No users configured.</span></td></tr>';
+            html += '<tr><td colspan="3"><span class="text-danger">No users configured.</span></td></tr>';
         }
         for (var i = 0; i < efppUsers.users.length; i++) {
             var u = efppUsers.users[i];
-            html += '<tr><td style="padding:4px;"><b>' + escHtml(u) + '</b></td>' +
+            var name = u.username || '';
+            var badge = u.must_change ? '<span class="text-warning"><b>&#9888;</b> must change password</span>' : '<span class="text-success">OK</span>';
+            html += '<tr><td style="padding:4px;"><b>' + escHtml(name) + '</b></td>' +
+                '<td style="padding:4px;">' + badge + '</td>' +
                 '<td style="padding:4px;">' +
-                '<input type="button" class="buttons" value="Delete" data-user="' + escAttr(u) + '" onclick="efppUsers.del(this);">' +
+                '<input type="button" class="buttons" value="Change Password" data-user="' + escAttr(name) + '" onclick="efppUsers.openModal(this);"> ' +
+                '<input type="button" class="buttons" value="Delete" data-user="' + escAttr(name) + '" onclick="efppUsers.del(this);">' +
                 '</td></tr>';
         }
         html += '</table>';
@@ -149,16 +187,6 @@ var efppUsers = {
         } else {
             warn.html('');
         }
-
-        var sel = $('#efpp_cp_user');
-        var current = sel.val();
-        sel.empty();
-        for (var j = 0; j < efppUsers.users.length; j++) {
-            sel.append('<option value="' + escAttr(efppUsers.users[j]) + '">' + escHtml(efppUsers.users[j]) + '</option>');
-        }
-        if (current && efppUsers.users.indexOf(current) !== -1) {
-            sel.val(current);
-        }
     },
 
     refresh: function() {
@@ -175,6 +203,7 @@ var efppUsers = {
         var username = $('#efpp_new_username').val();
         var password = $('#efpp_new_password').val();
         var confirm = $('#efpp_new_confirm').val();
+        var mustChange = $('#efpp_new_must_change').is(':checked');
         $('#efpp_users_result').html('<span class="text-warning">Adding user...</span>');
         $.ajax({
             url: efppUsers.apiBase + '/add-user',
@@ -183,7 +212,8 @@ var efppUsers = {
             data: JSON.stringify({
                 username: username,
                 password: password,
-                password_confirm: confirm
+                password_confirm: confirm,
+                must_change: mustChange ? 1 : 0
             }),
             dataType: 'json',
             success: function(data) {
@@ -192,6 +222,7 @@ var efppUsers = {
                     $('#efpp_new_username').val('');
                     $('#efpp_new_password').val('');
                     $('#efpp_new_confirm').val('');
+                    $('#efpp_new_must_change').prop('checked', false);
                 }
             },
             error: function(xhr) {
@@ -200,11 +231,31 @@ var efppUsers = {
         });
     },
 
+    openModal: function(btn) {
+        var username = btn.getAttribute('data-user');
+        efppUsers.editing = username;
+        $('#efpp_cp_title').text(username);
+        $('#efpp_cp_password').val('');
+        $('#efpp_cp_confirm').val('');
+        $('#efpp_cp_result').html('');
+        for (var i = 0; i < efppUsers.users.length; i++) {
+            if (efppUsers.users[i].username === username) {
+                $('#efpp_cp_must_change').prop('checked', !!efppUsers.users[i].must_change);
+                break;
+            }
+        }
+        clearInterval(efppUsers.cpTimer);
+        efppUsers.cpTimer = setInterval(function() { efppUsers.refresh(); }, 3000);
+        $('#efpp_change_modal').modal('show');
+        $('#efpp_cp_password').focus();
+    },
+
     changePassword: function() {
-        var username = $('#efpp_cp_user').val();
+        var username = efppUsers.editing;
         var password = $('#efpp_cp_password').val();
         var confirm = $('#efpp_cp_confirm').val();
-        $('#efpp_users_result').html('<span class="text-warning">Changing password...</span>');
+        var mustChange = $('#efpp_cp_must_change').is(':checked');
+        $('#efpp_cp_result').html('<span class="text-warning">Changing password...</span>');
         $.ajax({
             url: efppUsers.apiBase + '/set-user-password',
             type: 'POST',
@@ -212,18 +263,18 @@ var efppUsers = {
             data: JSON.stringify({
                 username: username,
                 password: password,
-                password_confirm: confirm
+                password_confirm: confirm,
+                must_change: mustChange ? 1 : 0
             }),
             dataType: 'json',
             success: function(data) {
-                efppUsers.handleResponse(data);
+                efppUsers.showCpResult(data);
                 if (data.success) {
-                    $('#efpp_cp_password').val('');
-                    $('#efpp_cp_confirm').val('');
+                    clearInterval(efppUsers.cpTimer);
                 }
             },
             error: function(xhr) {
-                efppUsers.handleResponse({ success: false, errors: ['Could not reach the plugin API. Check the FPP web server logs.'] });
+                efppUsers.showCpResult({ success: false, errors: ['Could not reach the plugin API. Check the FPP web server logs.'] });
             }
         });
     },
@@ -242,6 +293,9 @@ var efppUsers = {
             dataType: 'json',
             success: function(data) {
                 efppUsers.handleResponse(data);
+                if (data.success) {
+                    $('#efpp_change_modal').modal('hide');
+                }
             },
             error: function(xhr) {
                 efppUsers.handleResponse({ success: false, errors: ['Could not reach the plugin API. Check the FPP web server logs.'] });

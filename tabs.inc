@@ -15,15 +15,42 @@ function efpp_tab_active($page) {
 	return $current === $page ? 'active' : '';
 }
 
+// UI level controls which advanced features are shown. The value is read from
+// FPP's runtime settings ("uiLevel"), which is an integer:
+//   Basic=0, Advanced=1, Experimental=2, Developer=3
+function efpp_ui_level() {
+	$file = '/home/fpp/media/settings';
+	if (is_readable($file)) {
+		foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+			if (strncmp($line, 'uiLevel=', 8) === 0) {
+				$v = (int)substr($line, 8);
+				return $v >= 0 ? $v : 0;
+			}
+		}
+	}
+	return 0;
+}
+
+$efpp_ui_level = efpp_ui_level();
+
 $efpp_tabs = Array(
-	Array('page' => 'status.php',    'icon' => '&#9632;',  'label' => 'Status'),
-	Array('page' => 'config.php',    'icon' => '&#9881;',  'label' => 'Config'),
-	Array('page' => 'users.php',     'icon' => '&#128101;', 'label' => 'Users'),
-	Array('page' => 'loginpage.php', 'icon' => '&#128274;', 'label' => 'Login Page'),
-	Array('page' => 'logs.php',      'icon' => '&#9776;',  'label' => 'Logs'),
-	Array('page' => 'help.php',      'icon' => '&#63;',    'label' => 'Help'),
-	Array('page' => 'about.php',     'icon' => '&#9432;',  'label' => 'About')
+	Array('page' => 'status.php', 'icon' => '&#9632;', 'label' => 'Status'),
+	Array('page' => 'config.php', 'icon' => '&#9881;', 'label' => 'Config'),
+	Array('page' => 'users.php',  'icon' => '&#128101;', 'label' => 'Users'),
+	Array('page' => 'pages.php',  'icon' => '&#128274;', 'label' => 'Pages'),
+	Array('page' => 'help.php',   'icon' => '&#63;',    'label' => 'Help'),
+	Array('page' => 'about.php',  'icon' => '&#9432;',  'label' => 'About')
 );
+
+// The Logs tab is only useful to advanced users, so hide it below the
+// Advanced UI level.
+if ($efpp_ui_level >= 1) {
+	$efpp_tabs = array_merge(
+		array_slice($efpp_tabs, 0, 4),
+		array(array('page' => 'logs.php', 'icon' => '&#9776;', 'label' => 'Logs')),
+		array_slice($efpp_tabs, 4)
+	);
+}
 ?>
 <style>
 .tab-bar { display: flex; flex-wrap: wrap; gap: 0; margin-bottom: 12px; border-bottom: 2px solid var(--bs-border-color, #dee2e6); }

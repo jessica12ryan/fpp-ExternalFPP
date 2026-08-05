@@ -65,6 +65,7 @@ if (file_exists($settingsFile)) {
                         <i>(the new password-protected port, e.g. 8080)</i>
                     </td>
                 </tr>
+                <?php if (!empty($efpp_ui_level) && $efpp_ui_level >= 2): ?>
                 <tr>
                     <td style="padding: 4px;"><b>Backend port (FPP web):</b></td>
                     <td style="padding: 4px;">
@@ -73,6 +74,9 @@ if (file_exists($settingsFile)) {
                         <i>(normally 80, only change if FPP's UI is served on another port)</i>
                     </td>
                 </tr>
+                <?php else: ?>
+                <input type="hidden" id="efpp_backend_port" value="<?php echo htmlspecialchars($backendPort); ?>">
+                <?php endif; ?>
                 <tr>
                     <td style="padding: 4px;"></td>
                     <td style="padding: 4px;">
@@ -104,7 +108,7 @@ if (file_exists($settingsFile)) {
             <ul>
                 <li>Anyone who knows the URL of the extra port will be shown a <b>login page</b>. Without valid
                     credentials Apache redirects back to the login page and the UI stays protected.</li>
-                <li>The login page is fully customizable in the <b>Login Page</b> tab.</li>
+                <li>The login page is fully customizable in the <b>Pages</b> tab.</li>
                 <li>The extra port is plain HTTP. Do not expose it directly to the internet &mdash; use a VPN or a TLS-terminating reverse proxy for remote access.</li>
                 <li>If FPP's built-in UI Password is also set, access through this port may prompt for that password as well, depending on FPP's configuration.</li>
                 <li>This plugin uses FPP's existing Apache web server &mdash; no additional packages are required.</li>

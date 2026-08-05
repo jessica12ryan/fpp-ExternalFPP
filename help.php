@@ -51,14 +51,21 @@ $pluginDir = __DIR__;
 
             <hr>
 
-            <h3>Customizing the Login Page</h3>
+            <h3>Customizing the Pages</h3>
             <p>
-                Open the <b>Login Page</b> tab to edit the HTML of the login page and to see
-                the code that is required for logging in to work (the
-                <code>&lt;form method="post"&gt;</code> and the <code>httpd_username</code> /
-                <code>httpd_password</code> fields). The page is stored in the plugin's
-                <code>www/login.html</code> file and is read by Apache on every request, so
-                changes take effect as soon as you save them.
+                Open the <b>Pages</b> tab to edit the HTML of the <b>Login Page</b> (shown to
+                visitors who are not signed in) and the <b>Change Password Page</b> (shown right
+                after signing in). Each editor lists the code that is required for the page to
+                work &mdash; e.g. the <code>&lt;form method="post"&gt;</code> and the
+                <code>httpd_username</code> / <code>httpd_password</code> fields on the login
+                page. Pages are stored in the plugin's <code>www/</code> folder and are read by
+                Apache on every request, so changes take effect as soon as you save them.
+            </p>
+            <p>
+                After a successful login you land on the Change Password Page. If the user has
+                been marked <b>must change password at next login</b> (in the Users tab), they are
+                held on this page until a new password is set; everyone else is forwarded straight
+                to the FPP web UI.
             </p>
             <p>
                 To sign out, visit <code>/logout</code> in the browser (this removes the session
@@ -117,7 +124,7 @@ sudo tail -50 /home/fpp/media/logs/apache2-externalfpp-error.log</pre>
                 The password may have been changed but not written to the password file yet, or the
                 password file may have been overwritten. Set the user's password again in the
                 <b>Users</b> tab (add the user or use <b>Change Password</b>). Also check the
-                <b>Login Page</b> tab: if the saved page is missing the required
+                <b>Pages</b> tab: if the saved login page is missing the required
                 <code>httpd_username</code> / <code>httpd_password</code> form fields, logging in
                 cannot work.
             </p>

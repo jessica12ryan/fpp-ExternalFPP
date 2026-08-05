@@ -29,6 +29,9 @@ define('LOGIN_PAGE_URL', '/login.html');
 define('LOGIN_PAGE_DIR', PLUGIN_DIR . '/www');
 define('LOGIN_PAGE_FILE', LOGIN_PAGE_DIR . '/login.html');
 define('LOGIN_PAGE_TEMPLATE', PLUGIN_DIR . '/templates/login.html');
+define('CHANGE_PW_FILE', LOGIN_PAGE_DIR . '/change-password.html');
+define('CHANGE_PW_TEMPLATE', PLUGIN_DIR . '/templates/change-password.html');
+define('CHANGE_PW_URL', '/change-password.html');
 define('SESSION_COOKIE', 'fppefpp');
 define('FPP_LOG_DIR', getenv('LOGDIR') ?: '/home/fpp/media/logs');
 define('FPP_LOG_FILE', FPP_LOG_DIR . '/plugin-fpp-ExternalFPP.log');
@@ -115,6 +118,26 @@ function efppDefaultLoginPage() {
         . '<button type="submit">Sign In</button></form></body></html>';
 }
 
+function efppDefaultChangePasswordPage() {
+    if (file_exists(CHANGE_PW_TEMPLATE)) {
+        $c = @file_get_contents(CHANGE_PW_TEMPLATE);
+        if (is_string($c) && $c !== '') {
+            return $c;
+        }
+    }
+    return '<!DOCTYPE html><html><body style="font-family:sans-serif;background:#1c1e21;color:#eee;text-align:center;padding:60px;">'
+        . '<h1>Change Password</h1>'
+        . '<p id="efpp_message">Please set a new password.</p>'
+        . '<input type="password" id="efpp_password" placeholder="New password"><br><br>'
+        . '<input type="password" id="efpp_password_confirm" placeholder="Confirm new password"><br><br>'
+        . '<button onclick="efppSubmit()">Change Password</button>'
+        . '<script>'
+        . 'function efppSubmit(){var p=document.getElementById("efpp_password").value,c=document.getElementById("efpp_password_confirm").value;'
+        . 'fetch("/api/plugin/fpp-ExternalFPP/change-my-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:p,password_confirm:c})})'
+        . '.then(function(r){return r.json();}).then(function(d){if(d.success){window.location.href="/";}else{document.getElementById("efpp_message").textContent=(d.errors||[]).join(" ");}});}'
+        . '</script></body></html>';
+}
+
 /**
  * Makes sure the user-editable login page exists. It lives in the plugin's
  * www/ directory (separate from config/ so Apache can be granted read access
@@ -134,6 +157,26 @@ function efppEnsureLoginPage() {
         efppRun('chmod 644 ' . escapeshellarg(LOGIN_PAGE_FILE) . ' 2>/dev/null');
     }
     return true;
+}
+
+function efppEnsureChangePasswordPage() {
+    efppEnsureConfigDir();
+    if (!is_dir(LOGIN_PAGE_DIR)) {
+        @mkdir(LOGIN_PAGE_DIR, 0775, true);
+    }
+    if (!file_exists(CHANGE_PW_FILE)) {
+        if (@file_put_contents(CHANGE_PW_FILE, efppDefaultChangePasswordPage()) === false) {
+            efppLog('WARNING: could not create the change password page at ' . CHANGE_PW_FILE);
+            return false;
+        }
+        efppRun('chown fpp:fpp ' . escapeshellarg(CHANGE_PW_FILE) . ' 2>/dev/null');
+        efppRun('chmod 644 ' . escapeshellarg(CHANGE_PW_FILE) . ' 2>/dev/null');
+    }
+    return true;
+}
+
+function efppEnsurePages() {
+    return efppEnsureLoginPage() && efppEnsureChangePasswordPage();
 }
 
 /**
@@ -195,7 +238,7 @@ function efppWriteHtpasswd($users) {
     return array(false, 'Could not write the password file. htpasswd failed for: ' . implode(', ', $failed));
 }
 
-function efppBuildApacheConf($port, $backendPort, $htpasswdFile, $loginPageFile) {
+function efppBuildApacheConf($port, $backendPort, $htpasswdFile, $loginPageFile, $changePwFile) {
     $port = (int)$port;
     $backendPort = (int)$backendPort;
     $loginPageDir = dirname($loginPageFile);
@@ -226,13 +269,21 @@ function efppBuildApacheConf($port, $backendPort, $htpasswdFile, $loginPageFile)
     $lines[] = '    # FPP\'s own password file, which would re-trigger a browser prompt.';
     $lines[] = '    RequestHeader unset Authorization';
     $lines[] = '';
+    $lines[] = '    # Tell the backend which external user is logged in (from the session set by';
+    $lines[] = '    # mod_auth_form). The header is replaced server-side, never trusted from the';
+    $lines[] = '    # client, so it is safe for the API to use for "change my own password".';
+    $lines[] = '    RequestHeader unset X-Remote-User';
+    $lines[] = '    RequestHeader set X-Remote-User "%{REMOTE_USER}s"';
+    $lines[] = '';
     $lines[] = '    # Serve the login page directly from the plugin instead of proxying it.';
     $lines[] = '    # The "!" marks the URL as not-proxied so the Alias below can serve it.';
     $lines[] = '    ProxyPass ' . LOGIN_PAGE_URL . ' !';
+    $lines[] = '    ProxyPass ' . CHANGE_PW_URL . ' !';
     $lines[] = '    # Keep the logout handler local too (ProxyPass would otherwise override';
     $lines[] = '    # its SetHandler and send /logout to the FPP backend).';
     $lines[] = '    ProxyPass /logout !';
     $lines[] = '    Alias ' . LOGIN_PAGE_URL . ' ' . $loginPageFile;
+    $lines[] = '    Alias ' . CHANGE_PW_URL . ' ' . $changePwFile;
     $lines[] = '    <Directory ' . $loginPageDir . '>';
     $lines[] = '        Require all granted';
     $lines[] = '    </Directory>';
@@ -271,7 +322,7 @@ function efppBuildApacheConf($port, $backendPort, $htpasswdFile, $loginPageFile)
     $lines[] = '        AuthFormProvider file';
     $lines[] = '        AuthUserFile ' . $htpasswdFile;
     $lines[] = '        AuthFormLoginRequiredLocation ' . LOGIN_PAGE_URL;
-    $lines[] = '        AuthFormLoginSuccessLocation /';
+    $lines[] = '        AuthFormLoginSuccessLocation ' . CHANGE_PW_URL;
     $lines[] = '        AuthFormLogoutLocation ' . LOGIN_PAGE_URL;
     $lines[] = '        Require valid-user';
     $lines[] = '    </LocationMatch>';
@@ -343,7 +394,7 @@ function efppApply() {
     $users = efppUsersFromSettings($s);
 
     efppEnsureConfigDir();
-    efppEnsureLoginPage();
+    efppEnsurePages();
 
     // Always make sure the required Apache modules are present (idempotent).
     $missingMods = efppEnableModules();
@@ -385,7 +436,7 @@ function efppApply() {
     }
 
     if ($enabled) {
-        $conf = efppBuildApacheConf($port, $backendPort, HTPASSWD_FILE, LOGIN_PAGE_FILE);
+        $conf = efppBuildApacheConf($port, $backendPort, HTPASSWD_FILE, LOGIN_PAGE_FILE, CHANGE_PW_FILE);
         $tmp = APACHE_CONF_FILE . '.tmp';
         if (@file_put_contents($tmp, $conf) === false) {
             $msg = 'Could not write Apache config to ' . APACHE_CONF_FILE;

@@ -59,16 +59,21 @@ web UI. Requests without a valid session are redirected back to the login page. 
 plugin requires at least one user: you cannot enable it with zero users, and while it is
 enabled the last user cannot be deleted.
 
-## Customizing the login page
+## Customizing the pages
 
-The login page is just HTML. Open the plugin's **Login Page** tab, edit the page, and
-click **Save Login Page** - the change applies immediately (Apache reads the file on
-every request). The page is stored at `www/login.html` in the plugin directory.
+The pages are just HTML. Open the plugin's **Pages** tab, edit the **Login Page** or the
+**Change Password Page**, and click **Save** - the change applies immediately (Apache
+reads the file on every request). The pages are stored at `www/login.html` and
+`www/change-password.html` in the plugin directory.
 
-For login to work the page must contain a `<form method="post">` that posts to the
+For login to work the login page must contain a `<form method="post">` that posts to the
 protected port (`action="/"`) with `<input name="httpd_username">` and
-`<input name="httpd_password">` fields. The **Login Page** tab shows this required code
-and warns you if it is missing when you save.
+`<input name="httpd_password">` fields. The **Pages** tab shows this required code and
+warns you if it is missing when you save.
+
+After a successful login you land on the **Change Password Page**. Users marked
+**must change password at next login** (Users tab) are held there until they set a new
+password; everyone else is forwarded straight to the FPP web UI.
 
 To sign out, visit `http://<fpp-ip>:8080/logout`.
 
@@ -79,6 +84,7 @@ To sign out, visit `http://<fpp-ip>:8080/logout`.
 | Apache vhost | `<VirtualHost *:<port>>` added under `/etc/apache2/conf-available/fpp-externalfpp.conf` |
 | Authentication | Form login using `mod_auth_form` + `mod_session`/`mod_session_cookie`, checked against a `.htpasswd` file in the plugin's `config/` directory |
 | Login page | Served directly from `www/login.html` (not proxied), reachable without a session |
+| Change password page | Served from `www/change-password.html`; the login success location, so users who **must** change their password are held there first |
 | Proxy | `ProxyPass / http://127.0.0.1:80/` with `ProxyPreserveHost On` so cookies/sessions work normally |
 | Persistence | The Apache `conf-enabled` symlink survives reboots, so the extra port comes up at boot |
 | Cleanup | Uninstalling the plugin disables the vhost and removes the Apache config file |
