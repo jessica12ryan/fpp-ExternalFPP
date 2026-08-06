@@ -61,7 +61,6 @@ function efppLog($msg) {
 
 function efppLoadSettings() {
     $defaults = array(
-        'enabled' => 0,
         'port' => 8080,
         'backend_port' => BACKEND_DEFAULT_PORT,
         'https_port' => HTTPS_DEFAULT_PORT,
@@ -461,7 +460,8 @@ function efppApply() {
     $messages = array();
 
     $s = efppLoadSettings();
-    $enabled = !empty($s['enabled']);
+    $enabled = ((!empty($s['enable_http'] ?? 1)) && (int)$s['port'] > 0)
+        || ((!empty($s['enable_https'] ?? 1)) && (int)$s['https_port'] > 0);
     $port = (int)$s['port'];
     $backendPort = (int)$s['backend_port'];
     $httpsPort = (int)($s['https_port'] ?? HTTPS_DEFAULT_PORT);
@@ -508,9 +508,6 @@ function efppApply() {
     }
     if ($enableHttp && $enableHttps && $httpsPort === $port) {
         $errors[] = 'The HTTP port and the HTTPS port must be different.';
-    }
-    if (!$enableHttp && !$enableHttps) {
-        $errors[] = 'At least one of "Enable HTTP port" or "Enable HTTPS port" must be checked.';
     }
     if ($enabled && empty($users)) {
         $errors[] = 'The plugin is enabled but no users are configured. Create at least one user before enabling.';

@@ -50,8 +50,7 @@ For advanced users who prefer the command line, see [CONTRIBUTING.md](CONTRIBUTI
 2. Open the **Users** tab and add at least one user (a username and password).
 3. Open the **Config** tab. By default both the **HTTP port** and the **HTTPS port** are enabled (defaults `8080` and `8443`).
 4. If you want to force HTTPS only, uncheck **Enable HTTP port**. If you'd rather use only plain HTTP, uncheck **Enable HTTPS port**.
-5. Click **Save & Apply**.
-6. Click the button to **enable** external access.
+5. Click **Save & Apply** (or just tick a port checkbox — toggling a port applies immediately). External access turns on as soon as the **HTTP port** or **HTTPS port** is enabled.
 
 Now browse to:
 
@@ -65,7 +64,7 @@ You'll see a login page. Enter the username and password you created to reach th
 
 > **Note:** Because FPP uses a self-signed certificate, your browser will show a "not secure"/certificate warning before you reach the login page. That's expected and safe to continue past.
 
-> **Note:** You need at least one user to turn this on, and you can't delete the last user while it's enabled.
+> **Note:** You need at least one user to turn this on, and you can't delete the last user while at least one port is enabled.
 
 ---
 

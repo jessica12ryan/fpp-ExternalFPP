@@ -270,12 +270,14 @@ var efppPages = {
 
     renderPreview: function(s) {
         if (s.enabled) {
-            var base = 'http://' + window.location.hostname + ':' + s.port;
+            var scheme = s.enable_https ? 'https' : 'http';
+            var uport = s.enable_https ? s.https_port : s.port;
+            var base = scheme + '://' + window.location.hostname + ':' + uport;
             $('#efpp_preview_login').html('<a href="' + base + '/login.html" target="_blank">' + base + '/login.html</a>');
             $('#efpp_preview_change').html('<a href="' + base + '/change-password.html" target="_blank">' + base + '/change-password.html</a>');
         } else {
-            $('#efpp_preview_login').html('<span class="text-secondary">External port is disabled (enable it in the Config tab)</span>');
-            $('#efpp_preview_change').html('<span class="text-secondary">External port is disabled (enable it in the Config tab)</span>');
+            $('#efpp_preview_login').html('<span class="text-secondary">External access is disabled (check "Enable HTTP port" or "Enable HTTPS port" in the Config tab)</span>');
+            $('#efpp_preview_change').html('<span class="text-secondary">External access is disabled (check "Enable HTTP port" or "Enable HTTPS port" in the Config tab)</span>');
         }
     }
 };

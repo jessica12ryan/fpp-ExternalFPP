@@ -37,7 +37,8 @@ $pluginDir = __DIR__;
                 <li>Set an <b>HTTP port</b> (e.g. <code>8080</code>) and an <b>HTTPS port</b> (e.g. <code>8443</code>)</li>
                 <li>Add at least one <b>user</b> in the <b>Users</b> tab (username + password)</li>
                 <li>Leave <b>Enable HTTP port</b> and <b>Enable HTTPS port</b> checked to serve both, or uncheck either to force HTTPS-only or HTTP-only</li>
-                <li>Click <b>Save &amp; Apply</b>, then use the toggle button to <b>enable</b> the external access</li>
+                <li>Click <b>Save &amp; Apply</b> (port changes) or just tick <b>Enable HTTP port</b> /
+                    <b>Enable HTTPS port</b> &mdash; toggling a port checkbox applies immediately</li>
                 <li>Browse to <code>https://&lt;fpp-ip&gt;:8443/</code> &mdash; you will be asked to log in</li>
             </ol>
             <p>

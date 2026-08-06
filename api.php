@@ -48,7 +48,6 @@ function efppLog($msg) {
 
 function efppLoadSettings() {
     $defaults = array(
-        'enabled' => 0,
         'port' => 8080,
         'backend_port' => 80,
         'https_port' => 8443,
@@ -64,6 +63,10 @@ function efppLoadSettings() {
         return $defaults;
     }
     $s = array_merge($defaults, $s);
+    // 'enabled' no longer exists as a stored setting: external access is
+    // derived from whether any port is enabled. Drop it (and any stale value
+    // left by older versions) so it never gets written back to disk.
+    unset($s['enabled']);
     // Migrate the old single username/password layout to the users list.
     if (empty($s['users']) && !empty($s['username']) && !empty($s['password'])) {
         $s['users'] = array(array('username' => $s['username'], 'password' => $s['password']));
@@ -480,7 +483,7 @@ function efppStatusData() {
     }
     return array(
         'configured' => file_exists(EFPP_SETTINGS_FILE) ? 1 : 0,
-        'enabled' => !empty($s['enabled']) ? 1 : 0,
+        'enabled' => ((!empty($s['enable_http'] ?? 1)) || (!empty($s['enable_https'] ?? 1))) ? 1 : 0,
         'port' => $port,
         'backend_port' => $backendPort,
         'https_port' => (int)($s['https_port'] ?? 8443),
@@ -504,13 +507,6 @@ function efppValidateData($data, $existing) {
     $errors = array();
     $clean = $existing;
 
-    // Only touch 'enabled' when the caller explicitly sends it, so that a
-    // plain settings save (without the enabled field) never turns the
-    // external port off. Enable/disable is handled by the start/stop endpoints.
-    if (array_key_exists('enabled', $data)) {
-        $clean['enabled'] = !empty($data['enabled']) ? 1 : 0;
-    }
-
     $port = (int)($data['port'] ?? $existing['port']);
     if ($port < 1 || $port > 65535) {
         $errors[] = 'HTTP port must be between 1 and 65535.';
@@ -532,6 +528,8 @@ function efppValidateData($data, $existing) {
     $clean['enable_http'] = !empty($data['enable_http']) ? 1 : 0;
     $clean['enable_https'] = !empty($data['enable_https']) ? 1 : 0;
 
+    // Both ports off is a valid state: it simply turns external access off.
+    // Only the ports that are actually enabled need to be sane.
     if ($clean['enable_http'] && $clean['enable_https']) {
         if ($httpsPort === $port || $httpsPort === $backendPort) {
             $errors[] = 'The HTTP port and the HTTPS port must be different, and the HTTPS port must differ from the backend (FPP web) port.';
@@ -544,8 +542,6 @@ function efppValidateData($data, $existing) {
         if ($port === $backendPort) {
             $errors[] = 'The HTTP port and the backend (FPP web) port must be different.';
         }
-    } else {
-        $errors[] = 'At least one of "Enable HTTP port" or "Enable HTTPS port" must be checked.';
     }
 
     return array($clean, $errors);
@@ -579,40 +575,8 @@ function efppSaveEndpoint() {
 
     $result = efppRunApply();
     $result['settings'] = efppStatusData();
-    efppLog('Settings saved (enabled=' . $clean['enabled'] . ', port=' . $clean['port'] . ')');
+    efppLog('Settings saved (port=' . $clean['port'] . ', http=' . $clean['enable_http'] . ', https=' . $clean['enable_https'] . ')');
     return json($result);
-}
-
-function efppSetEnabled($enabled) {
-    $s = efppLoadSettings();
-    $s['enabled'] = $enabled ? 1 : 0;
-
-    $errors = array();
-    if ($enabled && empty(efppUsersFromSettings($s))) {
-        $errors[] = 'Create at least one user in the Users tab before enabling the plugin.';
-    }
-    if ($enabled && ((int)$s['port'] < 1 || (int)$s['port'] > 65535 || (int)$s['port'] === (int)$s['backend_port'])) {
-        $errors[] = 'Configure a valid HTTP port in the Config tab before enabling the plugin.';
-    }
-
-    if (!empty($errors)) {
-        return json(array('success' => false, 'messages' => array(), 'errors' => $errors));
-    }
-
-    efppSaveSettingsFile($s);
-    $result = efppRunApply();
-    $result['settings'] = efppStatusData();
-    return json($result);
-}
-
-function efppStartEndpoint() {
-    efppLog('Start requested');
-    return efppSetEnabled(true);
-}
-
-function efppStopEndpoint() {
-    efppLog('Stop requested');
-    return efppSetEnabled(false);
 }
 
 function efppRestartEndpoint() {
@@ -632,8 +596,8 @@ function efppTestEndpoint() {
     $users = efppUsersFromSettings($s);
     $testUser = !empty($users) ? $users[0] : null;
 
-    if (!empty($s['enabled']) === false) {
-        return json(array('success' => false, 'errors' => array('The plugin is not enabled. Enable it first, then test.')));
+    if (!($enableHttp || $enableHttps)) {
+        return json(array('success' => false, 'errors' => array('External access is disabled (no HTTP or HTTPS port is enabled). Enable a port in the Config tab first.')));
     }
 
     $results = array();
@@ -693,7 +657,7 @@ function efppUsersEndpoint() {
     foreach (efppUsersFromSettings($s) as $u) {
         $userList[] = array('username' => $u['username'], 'must_change' => !empty($u['must_change']) ? 1 : 0);
     }
-    return json(array('success' => true, 'users' => $userList, 'enabled' => !empty($s['enabled']) ? 1 : 0));
+    return json(array('success' => true, 'users' => $userList, 'enabled' => ((!empty($s['enable_http'] ?? 1)) || (!empty($s['enable_https'] ?? 1))) ? 1 : 0));
 }
 
 function efppSessionUser() {
@@ -881,7 +845,7 @@ function efppDeleteUserEndpoint() {
     $username = trim((string)($data['username'] ?? ''));
 
     $s = efppLoadSettings();
-    $enabled = !empty($s['enabled']);
+    $enabled = ((!empty($s['enable_http'] ?? 1)) || (!empty($s['enable_https'] ?? 1)));
     $users = efppUsersFromSettings($s);
 
     $found = false;
@@ -897,7 +861,7 @@ function efppDeleteUserEndpoint() {
         return json(array('success' => false, 'messages' => array(), 'errors' => array('User not found.')));
     }
     if ($enabled && count($users) <= 1) {
-        return json(array('success' => false, 'messages' => array(), 'errors' => array('Cannot delete the last user while the plugin is enabled. Disable the plugin first.')));
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('Cannot delete the last user while external access is enabled. Uncheck both "Enable HTTP port" and "Enable HTTPS port" first.')));
     }
 
     if (efppSaveSettingsFile(array_merge($s, array('users' => $kept))) === false) {
@@ -980,8 +944,6 @@ function getEndpointsfppExternalFPP() {
 
     $result[] = array('method' => 'GET', 'endpoint' => 'status', 'callback' => 'efppStatusEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'save', 'callback' => 'efppSaveEndpoint');
-    $result[] = array('method' => 'POST', 'endpoint' => 'start', 'callback' => 'efppStartEndpoint');
-    $result[] = array('method' => 'POST', 'endpoint' => 'stop', 'callback' => 'efppStopEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'restart', 'callback' => 'efppRestartEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'test', 'callback' => 'efppTestEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'users', 'callback' => 'efppUsersEndpoint');

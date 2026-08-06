@@ -18,7 +18,9 @@ $srvPort = 8080;
 if (file_exists($settingsFile)) {
     $s = json_decode(file_get_contents($settingsFile), true);
     if (is_array($s)) {
-        $srvEnabled = !empty($s['enabled']) ? 1 : 0;
+        $srvHttp = !empty($s['enable_http'] ?? 1);
+        $srvHttps = !empty($s['enable_https'] ?? 1);
+        $srvEnabled = ($srvHttp || $srvHttps) ? 1 : 0;
         $srvPort = (int)($s['port'] ?? 8080);
     }
 }
