@@ -31,6 +31,11 @@ function efppPageContent($pluginDir, $file, $template) {
 
 $loginPageContent = efppPageContent($pluginDir, '/www/login.html', '/templates/login.html');
 $changePwContent = efppPageContent($pluginDir, '/www/change-password.html', '/templates/change-password.html');
+
+// The bundled originals, embedded into the page so the editor can flag when the
+// live page differs from them.
+$loginTpl = (string)@file_get_contents($pluginDir . '/templates/login.html');
+$changeTpl = (string)@file_get_contents($pluginDir . '/templates/change-password.html');
 ?>
 
 <?php include __DIR__ . '/tabs.inc'; ?>
@@ -41,6 +46,17 @@ $changePwContent = efppPageContent($pluginDir, '/www/change-password.html', '/te
     .efpp-subtabs .buttons.active { background: #f2a21c; color: #1c1e21; }
     .efpp-page { display: none; }
     .efpp-page.active { display: block; }
+    .efpp-custom-badge {
+        margin-left: 8px;
+        padding: 2px 9px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+        vertical-align: middle;
+        display: inline-block;
+    }
+    .efpp-custom-badge.efpp-custom { background: #8a6d1a; color: #ffd166; }
+    .efpp-custom-badge.efpp-default { background: #3a3f46; color: #9aa0a6; }
 </style>
 
 <div style="margin:0 auto;">
@@ -51,7 +67,7 @@ $changePwContent = efppPageContent($pluginDir, '/www/change-password.html', '/te
 
     <div id="efpp_page_login" class="efpp-page active">
         <fieldset class="border p-3">
-            <legend>Login Page</legend>
+            <legend>Login Page <span id="efpp_badge_login" class="efpp-custom-badge"></span></legend>
             <div class="p-3">
                 <p>
                     This is the page visitors see when they open the external port and are not
@@ -112,7 +128,7 @@ $changePwContent = efppPageContent($pluginDir, '/www/change-password.html', '/te
 
     <div id="efpp_page_change" class="efpp-page">
         <fieldset class="border p-3">
-            <legend>Change Password Page</legend>
+            <legend>Change Password Page <span id="efpp_badge_change" class="efpp-custom-badge"></span></legend>
             <div class="p-3">
                 <p>
                     Visitors land on this page right after signing in on the external port. Users that an
@@ -192,6 +208,24 @@ document.getElementById("save").addEventListener("click", function () {
 </div>
 
 <script>
+// Bundled originals (slashes escaped so embedded HTML can't break out of the
+// script block). Used to flag when the live page has been customised.
+var EFPP_TPL = {
+    login: <?php echo json_encode(str_replace('</', '<\\/', $loginTpl)); ?>,
+    change: <?php echo json_encode(str_replace('</', '<\\/', $changeTpl)); ?>
+};
+
+function efppCustomBadge(page) {
+    var ta = page === 'login' ? '#efpp_login_page' : '#efpp_change_pw_page';
+    var badge = page === 'login' ? '#efpp_badge_login' : '#efpp_badge_change';
+    var current = String($(ta).val()).replace(/\r\n/g, "\n").trim();
+    var original = String(EFPP_TPL[page]).replace(/\r\n/g, "\n").trim();
+    var custom = current !== original;
+    $(badge)
+        .text(custom ? 'Customized' : 'Default')
+        .attr('class', 'efpp-custom-badge ' + (custom ? 'efpp-custom' : 'efpp-default'));
+}
+
 var efppPages = {
     apiBase: 'api/plugin/fpp-ExternalFPP',
 
@@ -231,6 +265,7 @@ var efppPages = {
             dataType: 'json',
             success: function(data) {
                 efppPages.renderResult(page, data);
+                efppCustomBadge(page);
             },
             error: function(xhr) {
                 efppPages.renderResult(page, { success: false, errors: ['Could not reach the plugin API. Check the FPP web server logs.'] });
@@ -261,6 +296,7 @@ var efppPages = {
                         dataType: 'json',
                         success: function(d) {
                             if (d.success) { $(ta).val(d.content); }
+                            efppCustomBadge(page);
                         }
                     });
                 }
@@ -291,6 +327,11 @@ function escHtml(s) {
 }
 
 $(document).ready(function() {
+    efppCustomBadge('login');
+    efppCustomBadge('change');
+    $('#efpp_login_page').on('input', function() { efppCustomBadge('login'); });
+    $('#efpp_change_pw_page').on('input', function() { efppCustomBadge('change'); });
+
     $.ajax({
         url: efppPages.apiBase + '/status',
         type: 'GET',
