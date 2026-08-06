@@ -56,9 +56,10 @@ if [ ! -f "${PLUGIN_DIR}/config/settings.json" ]; then
     mkdir -p "${PLUGIN_DIR}/config"
     cat > "${PLUGIN_DIR}/config/settings.json" <<'EOF'
 {
-  "enabled": 0,
   "port": 8080,
   "backend_port": 80,
+  "enable_http": 0,
+  "enable_https": 0,
   "users": []
 }
 EOF

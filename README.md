@@ -48,7 +48,7 @@ For advanced users who prefer the command line, see [CONTRIBUTING.md](CONTRIBUTI
 
 1. In FPP, go to **Content Setup → External FPP**.
 2. Open the **Users** tab and add at least one user (a username and password).
-3. Open the **Config** tab. By default both the **HTTP port** and the **HTTPS port** are enabled (defaults `8080` and `8443`).
+3. Open the **Config** tab. Both the **HTTP port** and the **HTTPS port** are **disabled** by default (ports default to `8080` and `8443`). Ticking one or both enables it.
 4. If you want to force HTTPS only, uncheck **Enable HTTP port**. If you'd rather use only plain HTTP, uncheck **Enable HTTPS port**.
 5. Port numbers save automatically when you click out of the field; ticking a port checkbox applies immediately. External access turns on as soon as the **HTTP port** or **HTTPS port** is enabled.
 

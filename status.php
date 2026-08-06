@@ -18,8 +18,8 @@ $srvPort = 8080;
 if (file_exists($settingsFile)) {
     $s = json_decode(file_get_contents($settingsFile), true);
     if (is_array($s)) {
-        $srvHttp = !empty($s['enable_http'] ?? 1);
-        $srvHttps = !empty($s['enable_https'] ?? 1);
+        $srvHttp = !empty($s['enable_http'] ?? 0);
+        $srvHttps = !empty($s['enable_https'] ?? 0);
         $srvEnabled = ($srvHttp || $srvHttps) ? 1 : 0;
         $srvPort = (int)($s['port'] ?? 8080);
     }
@@ -130,7 +130,6 @@ var efppStatus = {
                     ['Users count', s.user_count],
                     ['Apache vhost enabled', s.apache_conf_enabled ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
-                    ['Custom login page', s.login_page ? '<span class="text-success">Yes</span>' : '<span class="text-warning">No (default)</span>'],
                     ['HTTP port listening', s.enable_http ? (s.listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>'],
                     ['HTTPS port listening', s.enable_https ? (s.https_listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>'],
                     ['Backend FPP web reachable', s.backend_reachable ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],

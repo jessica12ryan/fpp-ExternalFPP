@@ -64,8 +64,8 @@ function efppLoadSettings() {
         'port' => 8080,
         'backend_port' => BACKEND_DEFAULT_PORT,
         'https_port' => HTTPS_DEFAULT_PORT,
-        'enable_http' => 1,
-        'enable_https' => 1,
+        'enable_http' => 0,
+        'enable_https' => 0,
         'users' => array()
     );
     if (!file_exists(SETTINGS_FILE)) {
@@ -460,13 +460,13 @@ function efppApply() {
     $messages = array();
 
     $s = efppLoadSettings();
-    $enabled = ((!empty($s['enable_http'] ?? 1)) && (int)$s['port'] > 0)
-        || ((!empty($s['enable_https'] ?? 1)) && (int)$s['https_port'] > 0);
+    $enabled = ((!empty($s['enable_http'] ?? 0)) && (int)$s['port'] > 0)
+        || ((!empty($s['enable_https'] ?? 0)) && (int)$s['https_port'] > 0);
     $port = (int)$s['port'];
     $backendPort = (int)$s['backend_port'];
     $httpsPort = (int)($s['https_port'] ?? HTTPS_DEFAULT_PORT);
-    $enableHttp = !empty($s['enable_http'] ?? 1);
-    $enableHttps = !empty($s['enable_https'] ?? 1);
+    $enableHttp = !empty($s['enable_http'] ?? 0);
+    $enableHttps = !empty($s['enable_https'] ?? 0);
 
     // Passwords are stored as bcrypt hashes; hash any legacy plaintext on disk.
     efppMigratePasswordHashes($s);

@@ -85,7 +85,8 @@ The install script:
 2. If the plugin is a git clone, it does a `git fetch` + hard reset to `origin/main`.
 3. Restores the backed-up config (so an update never loses your users/settings).
 4. Creates a default `settings.json` on fresh installs (`port=8080`,
-   `backend_port=80`, `https_port=8443`, `enable_http=1`, `enable_https=1`, no users).
+   `backend_port=80`, `https_port=8443`, `enable_http=0`, `enable_https=0`, no users),
+   so the external ports are <b>disabled by default</b> until the user enables one and adds a user.
 5. Fixes ownership/permissions for the `fpp` web user.
 6. Runs `scripts/apply.php` to write the Apache config.
 
@@ -234,9 +235,10 @@ password).
 
 ## Security model
 
-- **HTTPS is on by default.** With `enable_https` on, the HTTPS port is served with FPP's
-  self-signed snakeoil certificate (`/etc/ssl/certs/ssl-cert-snakeoil.pem`). Since `enable_http` is
-  also on by default, plain HTTP is available too. For HTTPS-only, set `enable_http=0` (uncheck
+- **Both ports are off by default.** A fresh install writes `enable_http=0` and `enable_https=0`,
+  so no external port is exposed until the user enables one (and adds at least one user). With
+  `enable_https` on, the HTTPS port is served with FPP's self-signed snakeoil certificate
+  (`/etc/ssl/certs/ssl-cert-snakeoil.pem`). For HTTPS-only, leave `enable_http` off (uncheck
   "Enable HTTP port"). An HTTP port that is enabled has no TLS: the login password travels as form
   data and the session cookie stores credentials in a reversible form (`mod_session_cookie`), so
   both are readable on the wire. Do not expose an unencrypted port to untrusted networks directly;

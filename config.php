@@ -26,8 +26,8 @@ if (file_exists($settingsFile)) {
         $port = (int)($s['port'] ?? 8080);
         $backendPort = (int)($s['backend_port'] ?? 80);
         $httpsPort = (int)($s['https_port'] ?? 8443);
-        $enableHttp = !empty($s['enable_http'] ?? 1) ? 1 : 0;
-        $enableHttps = !empty($s['enable_https'] ?? 1) ? 1 : 0;
+        $enableHttp = !empty($s['enable_http'] ?? 0) ? 1 : 0;
+        $enableHttps = !empty($s['enable_https'] ?? 0) ? 1 : 0;
         $enabled = ($enableHttp || $enableHttps) ? 1 : 0;
     }
 }

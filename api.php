@@ -51,8 +51,8 @@ function efppLoadSettings() {
         'port' => 8080,
         'backend_port' => 80,
         'https_port' => 8443,
-        'enable_http' => 1,
-        'enable_https' => 1,
+        'enable_http' => 0,
+        'enable_https' => 0,
         'users' => array()
     );
     if (!file_exists(EFPP_SETTINGS_FILE)) {
@@ -483,12 +483,12 @@ function efppStatusData() {
     }
     return array(
         'configured' => file_exists(EFPP_SETTINGS_FILE) ? 1 : 0,
-        'enabled' => ((!empty($s['enable_http'] ?? 1)) || (!empty($s['enable_https'] ?? 1))) ? 1 : 0,
+        'enabled' => ((!empty($s['enable_http'] ?? 0)) || (!empty($s['enable_https'] ?? 0))) ? 1 : 0,
         'port' => $port,
         'backend_port' => $backendPort,
         'https_port' => (int)($s['https_port'] ?? 8443),
-        'enable_http' => !empty($s['enable_http'] ?? 1) ? 1 : 0,
-        'enable_https' => !empty($s['enable_https'] ?? 1) ? 1 : 0,
+        'enable_http' => !empty($s['enable_http'] ?? 0) ? 1 : 0,
+        'enable_https' => !empty($s['enable_https'] ?? 0) ? 1 : 0,
         'users' => $usernames,
         'user_count' => count($usernames),
         'apache_conf_enabled' => file_exists(EFPP_APACHE_CONF_ENABLED) ? 1 : 0,
@@ -591,8 +591,8 @@ function efppTestEndpoint() {
     $port = (int)$s['port'];
     $backendPort = (int)$s['backend_port'];
     $httpsPort = (int)($s['https_port'] ?? 8443);
-    $enableHttp = !empty($s['enable_http'] ?? 1);
-    $enableHttps = !empty($s['enable_https'] ?? 1);
+    $enableHttp = !empty($s['enable_http'] ?? 0);
+    $enableHttps = !empty($s['enable_https'] ?? 0);
     $users = efppUsersFromSettings($s);
     $testUser = !empty($users) ? $users[0] : null;
 
@@ -657,7 +657,7 @@ function efppUsersEndpoint() {
     foreach (efppUsersFromSettings($s) as $u) {
         $userList[] = array('username' => $u['username'], 'must_change' => !empty($u['must_change']) ? 1 : 0);
     }
-    return json(array('success' => true, 'users' => $userList, 'enabled' => ((!empty($s['enable_http'] ?? 1)) || (!empty($s['enable_https'] ?? 1))) ? 1 : 0));
+    return json(array('success' => true, 'users' => $userList, 'enabled' => ((!empty($s['enable_http'] ?? 0)) || (!empty($s['enable_https'] ?? 0))) ? 1 : 0));
 }
 
 function efppSessionUser() {
@@ -845,7 +845,7 @@ function efppDeleteUserEndpoint() {
     $username = trim((string)($data['username'] ?? ''));
 
     $s = efppLoadSettings();
-    $enabled = ((!empty($s['enable_http'] ?? 1)) || (!empty($s['enable_https'] ?? 1)));
+    $enabled = ((!empty($s['enable_http'] ?? 0)) || (!empty($s['enable_https'] ?? 0)));
     $users = efppUsersFromSettings($s);
 
     $found = false;
@@ -1050,10 +1050,10 @@ function efppPublicCheck($force = false) {
     }
 
     $ports = array();
-    if (!empty($s['enable_http'] ?? 1)) {
+    if (!empty($s['enable_http'] ?? 0)) {
         $ports[] = array('scheme' => 'http', 'port' => (int)$s['port']);
     }
-    if (!empty($s['enable_https'] ?? 1)) {
+    if (!empty($s['enable_https'] ?? 0)) {
         $ports[] = array('scheme' => 'https', 'port' => (int)$s['https_port']);
     }
 
