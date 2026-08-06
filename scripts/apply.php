@@ -32,6 +32,11 @@ define('LOGIN_PAGE_TEMPLATE', PLUGIN_DIR . '/templates/login.html');
 define('CHANGE_PW_FILE', LOGIN_PAGE_DIR . '/change-password.html');
 define('CHANGE_PW_TEMPLATE', PLUGIN_DIR . '/templates/change-password.html');
 define('CHANGE_PW_URL', '/change-password.html');
+ // After a successful form login, mod_auth_form redirects here. It is a plugin
+ // API endpoint that 302s the visitor to either the FPP UI or the change-password
+ // page (when their account needs a forced change), so the change-password page
+ // never briefly appears for accounts that do not require it.
+define('LOGIN_SUCCESS_URL', '/api/plugin/fpp-ExternalFPP/login-success');
 define('SESSION_COOKIE', 'fppefpp');
 define('FPP_LOG_DIR', getenv('LOGDIR') ?: '/home/fpp/media/logs');
 define('FPP_LOG_FILE', FPP_LOG_DIR . '/plugin-fpp-ExternalFPP.log');
@@ -330,7 +335,7 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '        AuthFormProvider file';
     $lines[] = '        AuthUserFile ' . $htpasswdFile;
     $lines[] = '        AuthFormLoginRequiredLocation ' . LOGIN_PAGE_URL;
-    $lines[] = '        AuthFormLoginSuccessLocation ' . CHANGE_PW_URL;
+    $lines[] = '        AuthFormLoginSuccessLocation ' . LOGIN_SUCCESS_URL;
     $lines[] = '        AuthFormLogoutLocation ' . LOGIN_PAGE_URL;
     $lines[] = '        Require valid-user';
     $lines[] = '    </LocationMatch>';

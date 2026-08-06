@@ -699,8 +699,27 @@ function efppGetSessionUserEndpoint() {
         }
     }
 
-    // The session-user endpoint is only called from the change-password page,
-    // which is the AuthFormLoginSuccessLocation, so each call marks a login.
+    return json(array('success' => true, 'username' => $user, 'must_change' => $mustChange));
+}
+
+function efppLoginSuccessEndpoint() {
+    // mod_auth_form sends every successful login here (AuthFormLoginSuccessLocation).
+    // Send the visitor on to the FPP UI, or to the change-password page when their
+    // account has the must_change flag. Doing it server-side (a 302) avoids flashing
+    // the change-password page on accounts that do not require a forced change.
+    $user = efppSessionUser();
+    $target = '/';
+    if ($user !== '') {
+        foreach (efppUsersList() as $u) {
+            if (strcasecmp($u['username'], $user) === 0) {
+                if (!empty($u['must_change'])) {
+                    $target = EFPP_CHANGE_PW_URL;
+                }
+                break;
+            }
+        }
+    }
+
     // The real client IP is forwarded by the vhost as X-Forwarded-For (set
     // server-side by Apache), since the API is reached through the proxy and
     // REMOTE_ADDR alone would always be 127.0.0.1.
@@ -710,7 +729,8 @@ function efppGetSessionUserEndpoint() {
     }
     efppLog('SUCCESS Login: ' . $user . ($clientIp !== '' ? ' from ' . $clientIp : ''));
 
-    return json(array('success' => true, 'username' => $user, 'must_change' => $mustChange));
+    header('Location: ' . $target, true, 302);
+    exit;
 }
 
 function efppChangeMyPasswordEndpoint() {
@@ -1092,6 +1112,7 @@ function getEndpointsfppExternalFPP() {
     $result[] = array('method' => 'POST', 'endpoint' => 'set-user-password', 'callback' => 'efppSetPasswordEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'delete-user', 'callback' => 'efppDeleteUserEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'session-user', 'callback' => 'efppGetSessionUserEndpoint');
+    $result[] = array('method' => 'GET', 'endpoint' => 'login-success', 'callback' => 'efppLoginSuccessEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'change-my-password', 'callback' => 'efppChangeMyPasswordEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'logs', 'callback' => 'efppLogsEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'icon', 'callback' => 'efppIconEndpoint');
