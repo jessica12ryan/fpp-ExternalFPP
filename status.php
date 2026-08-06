@@ -40,11 +40,71 @@ if (file_exists($settingsFile)) {
             </p>
         </div>
     </fieldset>
+
+    <fieldset class="border p-3" style="margin-top:12px;">
+        <legend>Public Accessibility</legend>
+        <div class="p-3">
+            <div id="efpp_public_table">
+                <span class="text-secondary">Not checked yet.</span>
+            </div>
+            <p style="margin-top:10px;">
+                <input type="button" class="buttons" value="&#8635; Check now" onclick="efppStatus.checkPublic(true);">
+                <span class="text-secondary" style="margin-left:8px;">Asks servers on the internet to try connecting to the external ports, to show whether your router forwards them beyond your local network.</span>
+            </p>
+        </div>
+    </fieldset>
 </div>
 
 <script>
 var efppStatus = {
     apiBase: 'api/plugin/fpp-ExternalFPP',
+
+    checkPublic: function(force) {
+        $('#efpp_public_table').html('<span class="text-warning">Checking from the internet - this can take up to ~15s...</span>');
+        $.ajax({
+            url: efppStatus.apiBase + '/public-check' + (force ? '?force=1' : ''),
+            type: 'GET',
+            dataType: 'json',
+            success: function(d) {
+                efppStatus.renderPublic(d);
+            },
+            error: function() {
+                $('#efpp_public_table').html('<span class="text-danger">Could not reach the plugin API.</span>');
+            }
+        });
+    },
+
+    renderPublic: function(d) {
+        if (!d.success) {
+            $('#efpp_public_table').html('<span class="text-danger">' + escHtml(d.error || 'Public check failed.') + '</span>');
+            return;
+        }
+        var html = '<table class="fppTable" style="width:auto;">';
+        html += '<tr><td style="padding:4px;"><b>Public IP:</b></td><td style="padding:4px;">' +
+            escHtml(d.public_ip) +
+            ' <span class="text-secondary">(the address the internet sees, from the FPP\'s own outbound connection)</span></td></tr>';
+        if (!d.ports.length) {
+            html += '<tr><td style="padding:4px;"><b>Ports:</b></td><td style="padding:4px;">' +
+                '<span class="text-secondary">No external ports are enabled. Enable HTTP and/or HTTPS in the Config tab.</span></td></tr>';
+        }
+        for (var i = 0; i < d.ports.length; i++) {
+            var p = d.ports[i];
+            var dot = p.reachable === true ? '<span class="text-success">&#9679;</span>'
+                : (p.reachable === false ? '<span class="text-danger">&#9679;</span>'
+                : '<span class="text-warning">&#9679;</span>');
+            var txt = p.reachable === true ? 'Reachable'
+                : (p.reachable === false ? 'Not reached' : 'Unknown');
+            var color = p.reachable === true ? 'text-success'
+                : (p.reachable === false ? 'text-danger' : 'text-warning');
+            html += '<tr><td style="padding:4px;"><b>' + (p.scheme === 'https' ? 'HTTPS' : 'HTTP') + ' port (' + p.port + '):</b></td>' +
+                '<td style="padding:4px;"><span class="' + color + '">' + dot + ' ' + txt + '</span>' +
+                ' <a href="' + escAttr(p.url) + '" target="_blank">' + escHtml(p.url) + '</a><br>' +
+                '<span class="text-secondary">' + escHtml(p.detail) + '</span></td></tr>';
+        }
+        html += '</table>';
+        html += '<p class="text-secondary" style="margin-top:8px;">"Reachable" means an internet server could open a TCP connection to the public IP on that port (i.e. your router is forwarding it). A check can be inconclusive if a firewall blocks the checking service.</p>';
+        $('#efpp_public_table').html(html);
+    },
 
     refresh: function() {
         $.ajax({
@@ -110,9 +170,14 @@ function escHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function escAttr(s) {
+    return escHtml(s).replace(/'/g, '&#39;');
+}
+
 $(document).ready(function() {
     efppStatus.refresh();
     setInterval(efppStatus.refresh, 5000);
+    efppStatus.checkPublic(false);
 });
 </script>
 

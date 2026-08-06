@@ -939,10 +939,151 @@ function efppIconEndpoint() {
     exit;
 }
 
+function efppHttpJson($url, $method = 'GET', $timeout = 8) {
+    // Returns a decoded JSON array, or null if the HTTP request fails.
+    $ch = curl_init($url);
+    curl_setopt_array($ch, array(
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_CONNECTTIMEOUT => 6,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_CUSTOMREQUEST => $method,
+        CURLOPT_HTTPHEADER => array(
+            'Accept: application/json',
+            'User-Agent: fpp-ExternalFPP/1.0 (public-access-check)'
+        )
+    ));
+    $body = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($body === false || $code !== 200 || $body === '') {
+        return null;
+    }
+    $decoded = json_decode($body, true);
+    return is_array($decoded) ? $decoded : null;
+}
+
+function efppGetPublicIp() {
+    foreach (array('https://api.ipify.org', 'https://ipv4.icanhazip.com', 'https://ifconfig.me/ip') as $url) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, array(
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_CONNECTTIMEOUT => 6,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_HTTPHEADER => array('User-Agent: fpp-ExternalFPP/1.0 (public-access-check)')
+        ));
+        $ip = trim((string)curl_exec($ch));
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        // Accept only a public (non-private, non-loopback) IPv4.
+        if ($code === 200 && $ip !== '' && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
+            && !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            return $ip;
+        }
+    }
+    return null;
+}
+
+// Asks check-host.net's public nodes to try opening a TCP connection to
+// $host:$port from the internet. Returns:
+//   array('reachable' => true|false|null, 'detail' => string)
+// true = at least one external node connected; null = could not determine.
+function efppCheckHostPort($host, $port, $nodes = 2) {
+    $target = $host . ':' . $port;
+    $submit = efppHttpJson('https://check-host.net/check-tcp?host=' . rawurlencode($target) . '&max_nodes=' . $nodes, 'POST', 10);
+    if (!is_array($submit) || empty($submit['request_id'])) {
+        return array('reachable' => null, 'detail' => 'Could not start a remote port check (outbound request failed).');
+    }
+    $rid = $submit['request_id'];
+    $deadline = microtime(true) + 12;
+    $reach = false;
+    $refused = false;
+    $settled = 0;
+    while (microtime(true) < $deadline) {
+        $res = efppHttpJson('https://check-host.net/check-result/' . rawurlencode($rid), 'GET', 6);
+        if (is_array($res)) {
+            $settled = 0;
+            foreach ($res as $val) {
+                if ($val === null) {
+                    continue; // node still running
+                }
+                $settled++;
+                if (is_array($val)) {
+                    foreach ($val as $item) {
+                        if (is_array($item) && isset($item['time'])) {
+                            $reach = true;
+                        } elseif (is_array($item) && isset($item['error'])) {
+                            $refused = true;
+                        }
+                    }
+                }
+            }
+            if ($reach) {
+                return array('reachable' => true, 'detail' => 'At least one internet node opened a TCP connection.');
+            }
+            if ($settled > 0 && $settled >= $nodes && $refused) {
+                return array('reachable' => false, 'detail' => 'All checking nodes could not connect (timeout/refused).');
+            }
+            if ($settled > 0 && $settled >= $nodes) {
+                return array('reachable' => false, 'detail' => 'Remote check completed but no node connected.');
+            }
+        }
+        usleep(1100000);
+    }
+    return array('reachable' => null, 'detail' => 'Remote check did not finish in time (try again).');
+}
+
+function efppPublicCheck($force = false) {
+    $cacheFile = EFPP_PLUGIN_DIR . '/config/public-check.json';
+    if (!$force && is_file($cacheFile)) {
+        $cached = json_decode(@file_get_contents($cacheFile), true);
+        if (is_array($cached) && isset($cached['checked_at']) && (time() - (int)$cached['checked_at']) < 120) {
+            return $cached;
+        }
+    }
+
+    $s = efppLoadSettings();
+    $host = efppGetPublicIp();
+    if ($host === null) {
+        return array('success' => false, 'checked_at' => time(), 'error' => 'Could not determine the public IP (no outbound internet?).');
+    }
+
+    $ports = array();
+    if (!empty($s['enable_http'] ?? 1)) {
+        $ports[] = array('scheme' => 'http', 'port' => (int)$s['port']);
+    }
+    if (!empty($s['enable_https'] ?? 1)) {
+        $ports[] = array('scheme' => 'https', 'port' => (int)$s['https_port']);
+    }
+
+    $checks = array();
+    foreach ($ports as $p) {
+        $r = efppCheckHostPort($host, $p['port']);
+        $checks[] = array(
+            'scheme' => $p['scheme'],
+            'port' => $p['port'],
+            'reachable' => $r['reachable'],
+            'detail' => $r['detail'],
+            'url' => $p['scheme'] . '://' . $host . ':' . $p['port'] . '/'
+        );
+    }
+
+    $out = array('success' => true, 'checked_at' => time(), 'public_ip' => $host, 'ports' => $checks);
+    @file_put_contents($cacheFile, json_encode($out));
+    return $out;
+}
+
+function efppPublicCheckEndpoint() {
+    $force = !empty($_GET['force']);
+    return json(efppPublicCheck($force));
+}
+
 function getEndpointsfppExternalFPP() {
     $result = array();
 
     $result[] = array('method' => 'GET', 'endpoint' => 'status', 'callback' => 'efppStatusEndpoint');
+    $result[] = array('method' => 'GET', 'endpoint' => 'public-check', 'callback' => 'efppPublicCheckEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'save', 'callback' => 'efppSaveEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'restart', 'callback' => 'efppRestartEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'test', 'callback' => 'efppTestEndpoint');
