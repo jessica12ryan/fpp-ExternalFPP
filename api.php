@@ -772,6 +772,16 @@ function efppChangeMyPasswordEndpoint() {
         return json(array('success' => false, 'messages' => array(), 'errors' => array($msg)));
     }
     efppLog('User changed own password: ' . $user);
+
+    // The form-login session cookie holds the user's password, and mod_auth_form
+    // re-validates it against the password file on every request. Leaving the old
+    // cookie in place would make the redirect to '/' fail validation and bounce
+    // the user back to the login page, so re-issue the session cookie with the
+    // new password here (plaintext, matching what Apache wrote at login time).
+    $sessionValue = urlencode(EFPP_SESSION_REALM) . '-user=' . urlencode($user)
+        . '&' . urlencode(EFPP_SESSION_REALM) . '-pw=' . urlencode($password);
+    header('Set-Cookie: ' . EFPP_SESSION_COOKIE . '=' . $sessionValue . '; path=/; HttpOnly; SameSite=Lax');
+
     return json(array('success' => true, 'messages' => array('Password changed. Continue to the FPP web UI.'), 'errors' => array()));
 }
 
