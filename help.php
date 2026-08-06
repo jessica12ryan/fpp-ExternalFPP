@@ -37,8 +37,8 @@ $pluginDir = __DIR__;
                 <li>Set an <b>HTTP port</b> (e.g. <code>8080</code>) and an <b>HTTPS port</b> (e.g. <code>8443</code>)</li>
                 <li>Add at least one <b>user</b> in the <b>Users</b> tab (username + password)</li>
                 <li>Leave <b>Enable HTTP port</b> and <b>Enable HTTPS port</b> checked to serve both, or uncheck either to force HTTPS-only or HTTP-only</li>
-                <li>Click <b>Save &amp; Apply</b> (port changes) or just tick <b>Enable HTTP port</b> /
-                    <b>Enable HTTPS port</b> &mdash; toggling a port checkbox applies immediately</li>
+                <li>Edit fields as needed &mdash; port numbers save automatically when you click out of the field,
+                    and ticking <b>Enable HTTP port</b> / <b>Enable HTTPS port</b> applies immediately</li>
                 <li>Browse to <code>https://&lt;fpp-ip&gt;:8443/</code> &mdash; you will be asked to log in</li>
             </ol>
             <p>
@@ -88,10 +88,10 @@ $pluginDir = __DIR__;
 
             <h3>Changing the Listen / HTTPS Port</h3>
             <p>
-                Change the <b>HTTP port</b> or <b>HTTPS port</b> in the Config tab and click
-                <b>Save &amp; Apply</b>. Everything updates automatically &mdash; just use your new
-                address from then on. The HTTP port and the HTTPS port must be different from each
-                other and from the backend (FPP web) port.
+                Change the <b>HTTP port</b> or <b>HTTPS port</b> in the Config tab and click out of the field.
+                It saves and applies automatically &mdash; just use your new address from then on. The
+                HTTP port and the HTTPS port must be different from each other and from the backend
+                (FPP web) port.
             </p>
 
             <hr>
@@ -132,7 +132,7 @@ $pluginDir = __DIR__;
             <p>
                 FPP's own web server can't be reached. Confirm the <b>backend port</b> in the
                 Config tab matches where FPP actually serves its UI (normally <code>80</code>),
-                then click <b>Save &amp; Apply</b>.
+                then click out of that field to re-apply.
             </p>
 
             <h4>Getting sent back to the login page even with the right password</h4>
@@ -154,8 +154,8 @@ $pluginDir = __DIR__;
             <p>
                 The cleanest fix is to <b>turn off FPP's built-in UI password</b> &mdash; this plugin
                 provides its own, so FPP's is no longer needed: go to <b>Status/Control &rarr; FPP
-                Settings &rarr; UI tab &rarr; set &quot;Enable UI password&quot; to No</b>, then click
-                <b>Save &amp; Apply</b> in this plugin again.
+                Settings &rarr; UI tab &rarr; set &quot;Enable UI password&quot; to No</b>. No need to re-save
+                anything in this plugin.
             </p>
             <p>
                 Alternatively, when you are prompted a second time on the external port, enter FPP's
