@@ -108,13 +108,6 @@ function efppHashPassword($plain) {
     return password_hash((string)$plain, PASSWORD_BCRYPT);
 }
 
-function efppPasswordMatches($plain, $stored) {
-    if (efppPasswordIsHash($stored)) {
-        return password_verify((string)$plain, $stored);
-    }
-    return hash_equals((string)$stored, (string)$plain);
-}
-
 /**
  * Writes every user to the Apache password file. Runs as the web (fpp) user,
  * which owns the plugin config directory, so no sudo is required here.
@@ -762,9 +755,6 @@ function efppChangeMyPasswordEndpoint() {
     }
     if ($password !== $confirm) {
         $errors[] = 'Password and confirmation do not match.';
-    }
-    if (efppPasswordMatches($password, $users[$found]['password'])) {
-        $errors[] = 'The new password must be different from the current one.';
     }
     if (!empty($errors)) {
         return json(array('success' => false, 'messages' => array(), 'errors' => $errors));
