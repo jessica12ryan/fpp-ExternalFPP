@@ -976,9 +976,9 @@ function efppGetPublicIp() {
         $ip = trim((string)curl_exec($ch));
         $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-        // Accept only a public (non-private, non-loopback) IPv4.
-        if ($code === 200 && $ip !== '' && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
-            && !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+        // Accept only a public (non-private, non-reserved) IPv4.
+        if ($code === 200 && $ip !== ''
+            && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false) {
             return $ip;
         }
     }
