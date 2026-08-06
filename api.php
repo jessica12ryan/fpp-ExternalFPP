@@ -1113,6 +1113,9 @@ function getEndpointsfppExternalFPP() {
     $result[] = array('method' => 'POST', 'endpoint' => 'delete-user', 'callback' => 'efppDeleteUserEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'session-user', 'callback' => 'efppGetSessionUserEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'login-success', 'callback' => 'efppLoginSuccessEndpoint');
+    // Some clients (and curl -L) re-send the original method when following the
+    // form-login 302, so accept POST here too rather than 404-ing them.
+    $result[] = array('method' => 'POST', 'endpoint' => 'login-success', 'callback' => 'efppLoginSuccessEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'change-my-password', 'callback' => 'efppChangeMyPasswordEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'logs', 'callback' => 'efppLogsEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'icon', 'callback' => 'efppIconEndpoint');
