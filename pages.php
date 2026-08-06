@@ -99,8 +99,9 @@ $changePwContent = efppPageContent($pluginDir, '/www/change-password.html', '/te
                 <ul>
                     <li>The username/password submitted here is checked against the users configured in the
                         <b>Users</b> tab.</li>
-                    <li>After a successful login the visitor lands on the <b>Change Password Page</b>, which
-                        forwards to the FPP web UI unless a new password is required.</li>
+                    <li>After a successful login the visitor is sent straight to the FPP web UI,
+                        unless their account is marked <b>must change password at next login</b>, in
+                        which case they are taken to the Change Password Page and held there.</li>
                     <li>To sign out, visit <code>/logout</code> in the browser.</li>
                     <li>When the fields above are missing, saving shows a warning so you can fix the
                         page before someone tries to use it.</li>
@@ -160,7 +161,8 @@ document.getElementById("save").addEventListener("click", function () {
     })
   }).then(function (r) { return r.json(); }).then(function (d) {
     if (d.success) {
-      alert("Password updated. Sign in again with the new password.");
+      // The API re-issues the login session cookie with the new password, so
+      // the visitor stays signed in and continues straight into the FPP UI.
       window.location.replace("/");
     } else {
       alert((d.errors || []).join(" "));
@@ -171,10 +173,11 @@ document.getElementById("save").addEventListener("click", function () {
 
                 <p>Notes:</p>
                 <ul>
-                    <li>Changing the password signs the visitor out (the old session is no longer
-                        valid), so after a successful change the next login uses the new password.</li>
-                    <li>The password must be at least 6 characters long and must differ from the current
-                        password.</li>
+                    <li>Changing the password also refreshes the login session: the API re-issues the
+                        session cookie with the new password, so the visitor stays signed in and the
+                        redirect to <code>/</code> goes straight into the FPP UI (no login prompt).</li>
+                    <li>The password must be at least 6 characters long and both fields must match.
+                        Reusing the current password is allowed.</li>
                     <li>The page should call <code>session-user</code> and forward to <code>/</code> when
                         <code>must_change</code> is false, otherwise every login would be forced through a
                         password change.</li>
