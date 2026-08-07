@@ -123,9 +123,8 @@ var efppStatus = {
                     urls.push('<a href="' + escAttr(su) + '" target="_blank">' + escHtml(su) + '</a>');
                 }
                 var rows = [
-                    ['Plugin configured', s.configured ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
-                    ['FPP UI Reachable', s.backend_port],
-                    ['External access', s.enabled ? '<span class="text-success">&#9679; Enabled</span>' : '<span class="text-danger">&#9679; Disabled</span>'],
+                    ['Plugin Status', s.enabled ? '<span class="text-success">&#9679; Enabled</span>' : '<span class="text-danger">&#9679; Disabled</span>'],
+                    ['Backend port (FPP UI)', s.backend_port],
                     ['HTTP enabled', s.enable_http ? '<span class="text-success">Yes</span>' : '<span class="text-secondary">No</span>'],
                     ['HTTP port', s.enable_http ? s.port : '<span class="text-secondary">-</span>'],
                     ['HTTP port listening', s.enable_http ? (s.listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>'],

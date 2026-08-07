@@ -108,8 +108,9 @@ if (file_exists($settingsFile)) {
                         <?php echo efppHelp('TLS (https) port. The plugin uses FPP\'s built-in self-signed certificate.'); ?>
                     </td>
                 </tr>
+                <?php if (!empty($efpp_ui_level) && $efpp_ui_level >= 2): ?>
                 <tr>
-                    <td style="padding: 4px;"><b>Use Custom Port via Router Firewall:</b></td>
+                    <td style="padding: 4px;"><i class="fas fa-fw fa-flask ui-level-2"></i> <b>Use Custom Port via Router Firewall:</b></td>
                     <td style="padding: 4px;">
                         <input type="checkbox" id="efpp_use_public_ports"
                                onchange="efpp.togglePublicPorts();"
@@ -137,9 +138,8 @@ if (file_exists($settingsFile)) {
                     </td>
                 </tr>
                 </tbody>
-                <?php if (!empty($efpp_ui_level) && $efpp_ui_level >= 2): ?>
                 <tr>
-                    <td style="padding: 4px;"><i class="fas fa-fw fa-flask ui-level-2"></i> <b>Backend port (FPP web):</b></td>
+                    <td style="padding: 4px;"><i class="fas fa-fw fa-flask ui-level-2"></i> <b>Backend port (FPP UI):</b></td>
                     <td style="padding: 4px;">
                         <input type="number" id="efpp_backend_port" min="1" max="65535" size="8"
                                onblur="efpp.onBlur('efpp_backend_port');"
@@ -234,7 +234,6 @@ var efpp = {
         $('#efpp_enable_http').prop('checked', !!s.enable_http);
         $('#efpp_enable_https').prop('checked', !!s.enable_https);
         $('#efpp_use_public_ports').prop('checked', !!s.use_public_ports);
-        efpp.showPublicPorts();
         // Remember the confirmed port values (do NOT overwrite the inputs while
         // the user is typing; this is only used for change detection / revert).
         efpp.saved.port = String(s.port);
@@ -247,6 +246,8 @@ var efpp = {
         // reflect them in the inputs (unlike the typing-in-progress ports).
         $('#efpp_http_public_port').val(efpp.saved.http_public_port);
         $('#efpp_https_public_port').val(efpp.saved.https_public_port);
+        // Show the controlled fields (and prefill blanks with the current ports).
+        efpp.showPublicPorts();
         var host = window.location.hostname;
         var urls = [];
         if (s.enable_http) urls.push('<a href="http://' + host + ':' + s.port + '/" target="_blank">http://' + host + ':' + s.port + '/</a>');
@@ -269,10 +270,20 @@ var efpp = {
         });
     },
 
-    // Show/hide the router public-port fields based on the checkbox state.
+    // Show/hide the router public-port fields based on the checkbox state. When
+    // turned on with no custom value set yet, prefill the fields with the ports
+    // currently in use (the internal HTTP/HTTPS ports) so it's easy to adjust.
     showPublicPorts: function() {
         var on = $('#efpp_use_public_ports').is(':checked');
         $('#efpp_public_ports_row').css('display', on ? '' : 'none');
+        if (on) {
+            if (!$('#efpp_http_public_port').val()) {
+                $('#efpp_http_public_port').val($('#efpp_port').val() || '');
+            }
+            if (!$('#efpp_https_public_port').val()) {
+                $('#efpp_https_public_port').val($('#efpp_https_port').val() || '');
+            }
+        }
     },
 
     // Toggling the "Use Custom Port via Router Firewall" checkbox applies now.
@@ -314,11 +325,16 @@ var efpp = {
             backend_port: $('#efpp_backend_port').val(),
             https_port: $('#efpp_https_port').val(),
             enable_http: $('#efpp_enable_http').is(':checked') ? 1 : 0,
-            enable_https: $('#efpp_enable_https').is(':checked') ? 1 : 0,
-            use_public_ports: $('#efpp_use_public_ports').is(':checked') ? 1 : 0,
-            http_public_port: $('#efpp_http_public_port').val(),
-            https_public_port: $('#efpp_https_public_port').val()
+            enable_https: $('#efpp_enable_https').is(':checked') ? 1 : 0
         };
+        // The router public-port controls are only shown at the Advanced UI
+        // level (matching the backend port); when they aren't rendered, omit
+        // them so a save from a lower UI level doesn't wipe any stored values.
+        if ($('#efpp_use_public_ports').length) {
+            vals.use_public_ports = $('#efpp_use_public_ports').is(':checked') ? 1 : 0;
+            vals.http_public_port = $('#efpp_http_public_port').val();
+            vals.https_public_port = $('#efpp_https_public_port').val();
+        }
         $('#efpp_result').html('<span class="text-warning">Saving and applying...</span>');
         $.ajax({
             url: efpp.apiBase + '/save',
@@ -383,9 +399,9 @@ $(document).ready(function() {
     efpp.saved.port = $('#efpp_port').val();
     efpp.saved.https_port = $('#efpp_https_port').val();
     efpp.saved.backend_port = $('#efpp_backend_port').val();
-    efpp.saved.use_public_ports = $('#efpp_use_public_ports').is(':checked') ? 1 : 0;
-    efpp.saved.http_public_port = $('#efpp_http_public_port').val();
-    efpp.saved.https_public_port = $('#efpp_https_public_port').val();
+    efpp.saved.use_public_ports = $('#efpp_use_public_ports').length ? ($('#efpp_use_public_ports').is(':checked') ? 1 : 0) : null;
+    efpp.saved.http_public_port = $('#efpp_http_public_port').length ? $('#efpp_http_public_port').val() : null;
+    efpp.saved.https_public_port = $('#efpp_https_public_port').length ? $('#efpp_https_public_port').val() : null;
     efpp.showPublicPorts();
     efpp.refreshStatus();
     setInterval(efpp.refreshStatus, 10000);

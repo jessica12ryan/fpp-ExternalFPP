@@ -102,6 +102,8 @@ $pluginDir = __DIR__;
                 <b>Public Accessibility (External URL)</b> check on the Status tab will then probe those
                 public ports, and show the correct public URL, instead of wrongly testing the internal
                 port. Leave the checkbox unticked to use the HTTP/HTTPS ports directly.
+                The checkbox (and its public-port fields) only appears when FPP's interface is set to
+                <b>Advanced</b> or higher, the same as the <b>Backend port (FPP UI)</b> field.
             </p>
 
             <hr>
