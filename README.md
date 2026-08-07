@@ -106,6 +106,7 @@ This removes your login and returns you to the login page.
 ### "I can't reach the external port"
 
 - Check the **Status** tab — the "Apache vhost enabled" and "port listening" indicators should both be green.
+- The **Public Accessibility (External URL)** section on the Status tab shows the **Internal URL** for each enabled port — that's the address to browse to on your network. Publish the same address through your router's port-forwarding/NAT to expose it to the public internet.
 - Make sure the port isn't already used by something else on your network.
 - If only the **HTTPS port** is enabled, use `https://<your-fpp-ip>:8443/` and not `:8080`.
 

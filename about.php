@@ -31,6 +31,8 @@ $pluginDir = __DIR__;
                 <ul>
                     <li>Serves FPP's web UI on an extra port of your choice</li>
                     <li>Protects that port with a username + password login page</li>
+                    <li>Shows the <b>Internal URL</b> of each enabled port under
+                        <b>Public Accessibility (External URL)</b> on the Status and Config tabs</li>
                     <li>No extra packages or daemons to install &mdash; it uses FPP's own web server</li>
                     <li>Survives reboots (the extra port comes up when FPP starts)</li>
                     <li>Supports multiple users (add / delete / change password from the UI)</li>

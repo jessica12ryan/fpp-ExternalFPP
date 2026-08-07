@@ -122,6 +122,9 @@ $pluginDir = __DIR__;
             <ul>
                 <li>Check the <b>Status</b> tab: the <b>Apache vhost enabled</b> and <b>port listening</b>
                     indicators should both be green.</li>
+                <li>The <b>Public Accessibility (External URL)</b> section on the <b>Status</b> tab lists the
+                    <b>Internal URL</b> of each enabled port &mdash; that is the address to browse to on your
+                    LAN. To make it reachable from the public internet, forward/publish that port on your router.</li>
                 <li>If only the <b>HTTPS port</b> is enabled, browse to <code>https://&lt;fpp-ip&gt;:8443/</code>,
                     not <code>:8080</code>.</li>
                 <li>Make sure the port isn't already in use by another service on your FPP.</li>

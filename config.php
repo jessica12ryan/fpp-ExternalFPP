@@ -128,7 +128,7 @@ if (file_exists($settingsFile)) {
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding: 4px;"><b>External URL:</b></td>
+                    <td style="padding: 4px;"><b>Internal URL:</b></td>
                     <td style="padding: 4px;" id="efpp_url_cell">
                         <span class="text-secondary">Enabled to see URL</span>
                     </td>

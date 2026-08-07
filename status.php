@@ -42,7 +42,7 @@ if (file_exists($settingsFile)) {
     </fieldset>
 
     <fieldset class="border p-3" style="margin-top:12px;">
-        <legend>Public Accessibility</legend>
+        <legend>Public Accessibility (External URL)</legend>
         <div class="p-3">
             <div id="efpp_public_table">
                 <span class="text-secondary">Not checked yet.</span>
@@ -139,7 +139,7 @@ var efppStatus = {
                     ['Users count', s.user_count],
                     ['Apache vhost enabled', s.apache_conf_enabled ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
-                    ['External URL', s.enabled && urls.length ? urls.join('<br>') : '<span class="text-secondary">-</span>']
+                    ['Internal URL', s.enabled && urls.length ? urls.join('<br>') : '<span class="text-secondary">-</span>']
                 ];
                 var html = '<table class="fppTable" style="width:auto;">';
                 for (var i = 0; i < rows.length; i++) {
