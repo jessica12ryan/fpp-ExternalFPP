@@ -58,6 +58,7 @@ if (file_exists($settingsFile)) {
 <script>
 var efppStatus = {
     apiBase: 'api/plugin/fpp-ExternalFPP',
+    uiLevel: <?php echo (int)$efpp_ui_level; ?>,
 
     checkPublic: function(force) {
         $('#efpp_public_table').html('<span class="text-warning">Checking from the internet - this can take up to ~15s...</span>');
@@ -122,16 +123,31 @@ var efppStatus = {
                     var su = 'https://' + host + ':' + s.https_port + '/';
                     urls.push('<a href="' + escAttr(su) + '" target="_blank">' + escHtml(su) + '</a>');
                 }
+                var advIcon = '<i class="fas fa-fw fa-graduation-cap ui-level-1"></i> ';
+                var expIcon = '<i class="fas fa-fw fa-flask ui-level-2"></i> ';
                 var rows = [
-                    ['Plugin Status', s.enabled ? '<span class="text-success">&#9679; Enabled</span>' : '<span class="text-danger">&#9679; Disabled</span>'],
-                    ['Backend port (FPP UI)', s.backend_port],
+                    ['Plugin Status', s.enabled ? '<span class="text-success">&#9679; Enabled</span>' : '<span class="text-danger">&#9679; Disabled</span>']
+                ];
+                // Backend port is an Experimental-level setting.
+                if (efppStatus.uiLevel >= 2) {
+                    rows.push([expIcon + 'Backend port (FPP UI)', s.backend_port]);
+                }
+                rows.push(
                     ['HTTP enabled', s.enable_http ? '<span class="text-success">Yes</span>' : '<span class="text-secondary">No</span>'],
                     ['HTTP port', s.enable_http ? s.port : '<span class="text-secondary">-</span>'],
                     ['HTTP port listening', s.enable_http ? (s.listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>'],
                     ['HTTPS enabled', s.enable_https ? '<span class="text-success">Yes</span>' : '<span class="text-secondary">No</span>'],
                     ['HTTPS port', s.enable_https ? s.https_port : '<span class="text-secondary">-</span>'],
-                    ['HTTPS port listening', s.enable_https ? (s.https_listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>'],
-
+                    ['HTTPS port listening', s.enable_https ? (s.https_listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>']
+                );
+                // Forwarded (router) ports are an Advanced-level setting.
+                if (efppStatus.uiLevel >= 1) {
+                    rows.push(
+                        [advIcon + 'Forwarded HTTP port', s.enable_http ? s.forwarded_http_port : '<span class="text-secondary">-</span>'],
+                        [advIcon + 'Forwarded HTTPS port', s.enable_https ? s.forwarded_https_port : '<span class="text-secondary">-</span>']
+                    );
+                }
+                rows.push(
                     ['Users', s.user_count > 0
                         ? s.users.map(escHtml).join(', ')
                         : '<span class="text-danger">None (' + (s.enabled ? 'plugin cannot stay enabled' : 'add a user to enable') + ')</span>'],
@@ -139,7 +155,7 @@ var efppStatus = {
                     ['Apache vhost enabled', s.apache_conf_enabled ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Internal URL', s.enabled && urls.length ? urls.join('<br>') : '<span class="text-secondary">-</span>']
-                ];
+                );
                 var html = '<table class="fppTable" style="width:auto;">';
                 for (var i = 0; i < rows.length; i++) {
                     html += '<tr><td style="padding:4px;"><b>' + rows[i][0] + ':</b></td><td style="padding:4px;">' + rows[i][1] + '</td></tr>';

@@ -97,12 +97,12 @@ $pluginDir = __DIR__;
                 If your <b>router firewall</b> forwards a different port to the plugin (for example it
                 forwards <code>9999</code> to the HTTP port <code>8081</code> on the FPP), tick
                 <b>Use Custom Port via Router Firewall</b> in the Config tab. When checked, the
-                <b>HTTP public port</b> and <b>HTTPS public port</b> fields appear &mdash; set these to
+                <b>Forwarded HTTP port</b> and <b>Forwarded HTTPS port</b> fields appear &mdash; set these to
                 the ports the internet actually connects to (the ones your router forwards). The
                 <b>Public Accessibility (External URL)</b> check on the Status tab will then probe those
                 public ports, and show the correct public URL, instead of wrongly testing the internal
                 port. Leave the checkbox unticked to use the HTTP/HTTPS ports directly.
-                The checkbox and its public-port fields only appear when FPP's interface is set to
+                The checkbox and its forwarded-port fields only appear when FPP's interface is set to
                 <b>Advanced</b> or higher (the <b>Backend port (FPP UI)</b> field instead appears at
                 <b>Experimental</b> or higher).
             </p>

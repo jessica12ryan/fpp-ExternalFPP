@@ -120,7 +120,7 @@ if (file_exists($settingsFile)) {
                 </tr>
                 <tbody id="efpp_public_ports_row">
                 <tr>
-                    <td style="padding: 4px;"><i class="fas fa-fw fa-graduation-cap ui-level-1"></i> <b>HTTP public port:</b></td>
+                    <td style="padding: 4px;"><i class="fas fa-fw fa-graduation-cap ui-level-1"></i> <b>Forwarded HTTP port:</b></td>
                     <td style="padding: 4px;">
                         <input type="number" id="efpp_http_public_port" min="1" max="65535" size="8"
                                onblur="efpp.onBlur('efpp_http_public_port');"
@@ -129,7 +129,7 @@ if (file_exists($settingsFile)) {
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding: 4px;"><i class="fas fa-fw fa-graduation-cap ui-level-1"></i> <b>HTTPS public port:</b></td>
+                    <td style="padding: 4px;"><i class="fas fa-fw fa-graduation-cap ui-level-1"></i> <b>Forwarded HTTPS port:</b></td>
                     <td style="padding: 4px;">
                         <input type="number" id="efpp_https_public_port" min="1" max="65535" size="8"
                                onblur="efpp.onBlur('efpp_https_public_port');"

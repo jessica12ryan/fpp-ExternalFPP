@@ -505,6 +505,8 @@ function efppStatusData() {
         'use_public_ports' => !empty($s['use_public_ports'] ?? 0) ? 1 : 0,
         'http_public_port' => isset($s['http_public_port']) ? (string)$s['http_public_port'] : '',
         'https_public_port' => isset($s['https_public_port']) ? (string)$s['https_public_port'] : '',
+        'forwarded_http_port' => efppPublicPort($s, 'http'),
+        'forwarded_https_port' => efppPublicPort($s, 'https'),
         'users' => $usernames,
         'user_count' => count($usernames),
         'apache_conf_enabled' => file_exists(EFPP_APACHE_CONF_ENABLED) ? 1 : 0,
