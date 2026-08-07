@@ -174,16 +174,13 @@ var efppUsers = {
             var u = efppUsers.users[i];
             var name = u.username || '';
             var role = u.role || 'admin';
-            var roleBadge = role === 'admin'
-                ? '<span class="text-success"><b>Admin</b></span>'
-                : '<span class="text-warning"><b>User</b></span>';
-            var roleSelect = '<select data-user="' + escAttr(name) + '" onchange="efppUsers.setRole(this);">' +
+            var roleSelect = '<select data-user="' + escAttr(name) + '" data-role="' + (role === 'admin' ? 'admin' : 'user') + '" onchange="efppUsers.setRole(this);">' +
                 '<option value="admin"' + (role === 'admin' ? ' selected' : '') + '>Admin</option>' +
                 '<option value="user"' + (role === 'user' ? ' selected' : '') + '>User</option>' +
                 '</select>';
             var badge = u.must_change ? '<span class="text-warning"><b>&#9888;</b> must change password</span>' : '<span class="text-success">OK</span>';
             html += '<tr><td style="padding:4px;"><b>' + escHtml(name) + '</b></td>' +
-                '<td style="padding:4px;">' + roleBadge + '<br>' + roleSelect + '</td>' +
+                '<td style="padding:4px;">' + roleSelect + '</td>' +
                 '<td style="padding:4px;">' + badge + '</td>' +
                 '<td style="padding:4px;">' +
                 '<input type="button" class="buttons" value="Change Password" data-user="' + escAttr(name) + '" onclick="efppUsers.openModal(this);"> ' +
@@ -302,7 +299,11 @@ var efppUsers = {
 
     setRole: function(sel) {
         var username = sel.getAttribute('data-user');
+        var previousRole = sel.getAttribute('data-role');
         var role = sel.value;
+        if (role === previousRole) {
+            return;
+        }
         $('#efpp_users_result').html('<span class="text-warning">Updating role for ' + escHtml(username) + '...</span>');
         $.ajax({
             url: efppUsers.apiBase + '/set-user-role',
@@ -314,14 +315,13 @@ var efppUsers = {
                 if (data.success) {
                     efppUsers.handleResponse(data);
                 } else {
-                    var msg = (data.errors || ['Could not update the role.']).join('<br>');
-                    $('#efpp_users_result').html('<span class="text-danger"><b>Errors:</b><br>' + escHtml(msg) + '</span>');
-                    efppUsers.refresh();
+                    sel.value = previousRole;
+                    efppUsers.handleResponse({ success: false, errors: data.errors || ['Could not update the role.'] });
                 }
             },
             error: function(xhr) {
+                sel.value = previousRole;
                 efppUsers.handleResponse({ success: false, errors: ['Could not reach the plugin API. Check the FPP web server logs.'] });
-                efppUsers.refresh();
             }
         });
     },
