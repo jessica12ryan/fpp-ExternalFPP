@@ -128,8 +128,8 @@ var efppStatus = {
                 var rows = [
                     ['Plugin Status', s.enabled ? '<span class="text-success">&#9679; Enabled</span>' : '<span class="text-danger">&#9679; Disabled</span>']
                 ];
-                // Backend port is an Experimental-level setting.
-                if (efppStatus.uiLevel >= 2) {
+                // Backend port is an Experimental-level setting; hide it when it's just the default 80.
+                if (efppStatus.uiLevel >= 2 && s.backend_port !== 80) {
                     rows.push([expIcon + 'Backend port (FPP UI)', s.backend_port]);
                 }
                 rows.push(
@@ -140,8 +140,8 @@ var efppStatus = {
                     ['HTTPS port', s.enable_https ? s.https_port : '<span class="text-secondary">-</span>'],
                     ['HTTPS port listening', s.enable_https ? (s.https_listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>']
                 );
-                // Forwarded (router) ports are an Advanced-level setting.
-                if (efppStatus.uiLevel >= 1) {
+                // Forwarded (router) ports only apply when "Use Custom Port via Router Firewall" is on, and are an Advanced-level setting.
+                if (efppStatus.uiLevel >= 1 && s.use_public_ports) {
                     rows.push(
                         [advIcon + 'Forwarded HTTP port', s.enable_http ? s.forwarded_http_port : '<span class="text-secondary">-</span>'],
                         [advIcon + 'Forwarded HTTPS port', s.enable_https ? s.forwarded_https_port : '<span class="text-secondary">-</span>']
