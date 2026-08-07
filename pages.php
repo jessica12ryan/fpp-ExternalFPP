@@ -210,8 +210,10 @@ document.getElementById("save").addEventListener("click", function () {
 <script>
 // Bundled originals, embedded safely for JavaScript. JSON_HEX_TAG escapes the
 // angle brackets as \u003C/\u003E (which decode back to the exact original), so
-// a "</script>" in a template can't break out of this script block while the
-// comparison in efppCustomBadge still sees the true template text.
+// a closing script tag inside a template can't break out of this script block
+// while the comparison in efppCustomBadge still sees the true template text.
+// NOTE: never write a literal closing-script sequence in this comment, since
+// the HTML parser would end the script element there and swallow the rest.
 var EFPP_TPL = {
     login: <?php echo json_encode($loginTpl, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES); ?>,
     change: <?php echo json_encode($changeTpl, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES); ?>
