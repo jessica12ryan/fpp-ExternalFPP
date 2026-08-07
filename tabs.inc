@@ -18,12 +18,36 @@ function efpp_tab_active($page) {
 // Session-based page guard. Accounts with the limited "user" role are not
 // allowed to view any plugin dashboard page. Reuse api.php's resolver (which
 // only identifies someone who logged in via the external port) so everything
-// stays consistent; a visitor with no session (normal FPP port / built-in
-// admin) is never blocked.
+// stays consistent. This applies only while the page is being served through
+// the external plugin port; on the normal FPP port a leftover session cookie
+// must not lock anyone out of the dashboard.
 if (!function_exists('efppSessionIsUser')) {
 	require_once __DIR__ . '/api.php';
 }
-if (efppSessionIsUser()) {
+
+// Detect whether the request is coming through the external (password-protected)
+// proxy port, mirroring menu.inc: the Host header carries the plugin port or
+// the external vhost forwarded X-Remote-User.
+$efppPort = 0;
+$efppHttpsPort = 0;
+$efppCfg = __DIR__ . '/config/settings.json';
+if (file_exists($efppCfg)) {
+	$efppS = json_decode(@file_get_contents($efppCfg), true);
+	if (is_array($efppS)) {
+		if (!empty($efppS['port'])) {
+			$efppPort = (int)$efppS['port'];
+		}
+		if (!empty($efppS['https_port'])) {
+			$efppHttpsPort = (int)$efppS['https_port'];
+		}
+	}
+}
+$efppHostPort = (int)parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_PORT);
+$efppExternal = ($efppPort > 0 && $efppHostPort === $efppPort)
+	|| ($efppHttpsPort > 0 && $efppHostPort === $efppHttpsPort)
+	|| !empty($_SERVER['HTTP_X_REMOTE_USER']);
+
+if ($efppExternal && efppSessionIsUser()) {
 	?>
 	<div class="p-3">
 		<div class="alert alert-danger" style="margin-top:12px;">
