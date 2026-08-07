@@ -19,6 +19,9 @@ $backendPort = 80;
 $httpsPort = 8443;
 $enableHttp = 1;
 $enableHttps = 1;
+$usePublicPorts = 0;
+$httpPublicPort = '';
+$httpsPublicPort = '';
 if (file_exists($settingsFile)) {
     $s = json_decode(file_get_contents($settingsFile), true);
     if (is_array($s)) {
@@ -28,6 +31,9 @@ if (file_exists($settingsFile)) {
         $httpsPort = (int)($s['https_port'] ?? 8443);
         $enableHttp = !empty($s['enable_http'] ?? 0) ? 1 : 0;
         $enableHttps = !empty($s['enable_https'] ?? 0) ? 1 : 0;
+        $usePublicPorts = !empty($s['use_public_ports'] ?? 0) ? 1 : 0;
+        $httpPublicPort = isset($s['http_public_port']) ? (string)$s['http_public_port'] : '';
+        $httpsPublicPort = isset($s['https_public_port']) ? (string)$s['https_public_port'] : '';
         $enabled = ($enableHttp || $enableHttps) ? 1 : 0;
     }
 }
@@ -102,6 +108,35 @@ if (file_exists($settingsFile)) {
                         <?php echo efppHelp('TLS (https) port. The plugin uses FPP\'s built-in self-signed certificate.'); ?>
                     </td>
                 </tr>
+                <tr>
+                    <td style="padding: 4px;"><b>Use Custom Port via Router Firewall:</b></td>
+                    <td style="padding: 4px;">
+                        <input type="checkbox" id="efpp_use_public_ports"
+                               onchange="efpp.togglePublicPorts();"
+                               <?php echo $usePublicPorts ? 'checked' : ''; ?>>
+                        <?php echo efppHelp('If your router forwards a different port to the plugin (e.g. 9999 to the internal HTTP port), tick this and set the ports the internet actually connects to below so the Public Accessibility check tests the right address.'); ?>
+                    </td>
+                </tr>
+                <tbody id="efpp_public_ports_row">
+                <tr>
+                    <td style="padding: 4px;"><b>HTTP public port:</b></td>
+                    <td style="padding: 4px;">
+                        <input type="number" id="efpp_http_public_port" min="1" max="65535" size="8"
+                               onblur="efpp.onBlur('efpp_http_public_port');"
+                               value="<?php echo htmlspecialchars($httpPublicPort); ?>">
+                        <?php echo efppHelp('The port your router forwards to the HTTP port above (leave blank to use the HTTP port).'); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 4px;"><b>HTTPS public port:</b></td>
+                    <td style="padding: 4px;">
+                        <input type="number" id="efpp_https_public_port" min="1" max="65535" size="8"
+                               onblur="efpp.onBlur('efpp_https_public_port');"
+                               value="<?php echo htmlspecialchars($httpsPublicPort); ?>">
+                        <?php echo efppHelp('The port your router forwards to the HTTPS port above (blank here to use the HTTPS port).'); ?>
+                    </td>
+                </tr>
+                </tbody>
                 <?php if (!empty($efpp_ui_level) && $efpp_ui_level >= 2): ?>
                 <tr>
                     <td style="padding: 4px;"><i class="fas fa-fw fa-flask ui-level-2"></i> <b>Backend port (FPP web):</b></td>
@@ -163,7 +198,7 @@ var efpp = {
     apiBase: 'api/plugin/fpp-ExternalFPP',
     enabled: false,
     // Last values the server confirmed, used to only save on change.
-    saved: { port: null, https_port: null, backend_port: null },
+    saved: { port: null, https_port: null, backend_port: null, use_public_ports: null, http_public_port: null, https_public_port: null },
 
     showError: function(msg) {
         $('#efpp_result').html('<span class="text-danger">' + msg + '</span>');
@@ -198,11 +233,20 @@ var efpp = {
         // save reverts them so the UI never shows an un-applied state).
         $('#efpp_enable_http').prop('checked', !!s.enable_http);
         $('#efpp_enable_https').prop('checked', !!s.enable_https);
+        $('#efpp_use_public_ports').prop('checked', !!s.use_public_ports);
+        efpp.showPublicPorts();
         // Remember the confirmed port values (do NOT overwrite the inputs while
         // the user is typing; this is only used for change detection / revert).
         efpp.saved.port = String(s.port);
         efpp.saved.https_port = String(s.https_port);
         efpp.saved.backend_port = String(s.backend_port);
+        efpp.saved.use_public_ports = s.use_public_ports ? 1 : 0;
+        efpp.saved.http_public_port = String(s.http_public_port || '');
+        efpp.saved.https_public_port = String(s.https_public_port || '');
+        // The public ports have server-confirmed values only after a save, so
+        // reflect them in the inputs (unlike the typing-in-progress ports).
+        $('#efpp_http_public_port').val(efpp.saved.http_public_port);
+        $('#efpp_https_public_port').val(efpp.saved.https_public_port);
         var host = window.location.hostname;
         var urls = [];
         if (s.enable_http) urls.push('<a href="http://' + host + ':' + s.port + '/" target="_blank">http://' + host + ':' + s.port + '/</a>');
@@ -225,6 +269,18 @@ var efpp = {
         });
     },
 
+    // Show/hide the router public-port fields based on the checkbox state.
+    showPublicPorts: function() {
+        var on = $('#efpp_use_public_ports').is(':checked');
+        $('#efpp_public_ports_row').css('display', on ? '' : 'none');
+    },
+
+    // Toggling the "Use Custom Port via Router Firewall" checkbox applies now.
+    togglePublicPorts: function() {
+        efpp.showPublicPorts();
+        efpp.save();
+    },
+
     // Toggling either port checkbox applies the change immediately.
     togglePort: function() {
         efpp.save();
@@ -244,8 +300,12 @@ var efpp = {
         $('#efpp_port').val(vals.port);
         $('#efpp_https_port').val(vals.https_port);
         $('#efpp_backend_port').val(vals.backend_port);
+        $('#efpp_http_public_port').val(vals.http_public_port);
+        $('#efpp_https_public_port').val(vals.https_public_port);
         $('#efpp_enable_http').prop('checked', !!vals.enable_http);
         $('#efpp_enable_https').prop('checked', !!vals.enable_https);
+        $('#efpp_use_public_ports').prop('checked', !!vals.use_public_ports);
+        efpp.showPublicPorts();
     },
 
     save: function() {
@@ -254,7 +314,10 @@ var efpp = {
             backend_port: $('#efpp_backend_port').val(),
             https_port: $('#efpp_https_port').val(),
             enable_http: $('#efpp_enable_http').is(':checked') ? 1 : 0,
-            enable_https: $('#efpp_enable_https').is(':checked') ? 1 : 0
+            enable_https: $('#efpp_enable_https').is(':checked') ? 1 : 0,
+            use_public_ports: $('#efpp_use_public_ports').is(':checked') ? 1 : 0,
+            http_public_port: $('#efpp_http_public_port').val(),
+            https_public_port: $('#efpp_https_public_port').val()
         };
         $('#efpp_result').html('<span class="text-warning">Saving and applying...</span>');
         $.ajax({
@@ -320,6 +383,10 @@ $(document).ready(function() {
     efpp.saved.port = $('#efpp_port').val();
     efpp.saved.https_port = $('#efpp_https_port').val();
     efpp.saved.backend_port = $('#efpp_backend_port').val();
+    efpp.saved.use_public_ports = $('#efpp_use_public_ports').is(':checked') ? 1 : 0;
+    efpp.saved.http_public_port = $('#efpp_http_public_port').val();
+    efpp.saved.https_public_port = $('#efpp_https_public_port').val();
+    efpp.showPublicPorts();
     efpp.refreshStatus();
     setInterval(efpp.refreshStatus, 10000);
 });

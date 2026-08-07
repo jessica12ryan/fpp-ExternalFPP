@@ -107,6 +107,7 @@ This removes your login and returns you to the login page.
 
 - Check the **Status** tab — the "Apache vhost enabled" and "port listening" indicators should both be green.
 - The **Public Accessibility (External URL)** section on the Status tab shows the **Internal URL** for each enabled port — that's the address to browse to on your network. Publish the same address through your router's port-forwarding/NAT to expose it to the public internet.
+- If your router forwards a **different** port than the plugin's (e.g. forwards `9999` to the internal HTTP port `8081`), tick **Use Custom Port via Router Firewall** in the Config tab and set the port(s) the internet actually connects to. The Public Accessibility check will then probe those public ports instead of the internal ones.
 - Make sure the port isn't already used by something else on your network.
 - If only the **HTTPS port** is enabled, use `https://<your-fpp-ip>:8443/` and not `:8080`.
 

@@ -53,6 +53,9 @@ function efppLoadSettings() {
         'https_port' => 8443,
         'enable_http' => 0,
         'enable_https' => 0,
+        'use_public_ports' => 0,
+        'http_public_port' => '',
+        'https_public_port' => '',
         'users' => array()
     );
     if (!file_exists(EFPP_SETTINGS_FILE)) {
@@ -499,6 +502,9 @@ function efppStatusData() {
         'https_port' => (int)($s['https_port'] ?? 8443),
         'enable_http' => !empty($s['enable_http'] ?? 0) ? 1 : 0,
         'enable_https' => !empty($s['enable_https'] ?? 0) ? 1 : 0,
+        'use_public_ports' => !empty($s['use_public_ports'] ?? 0) ? 1 : 0,
+        'http_public_port' => isset($s['http_public_port']) ? (string)$s['http_public_port'] : '',
+        'https_public_port' => isset($s['https_public_port']) ? (string)$s['https_public_port'] : '',
         'users' => $usernames,
         'user_count' => count($usernames),
         'apache_conf_enabled' => file_exists(EFPP_APACHE_CONF_ENABLED) ? 1 : 0,
@@ -537,6 +543,28 @@ function efppValidateData($data, $existing) {
 
     $clean['enable_http'] = !empty($data['enable_http']) ? 1 : 0;
     $clean['enable_https'] = !empty($data['enable_https']) ? 1 : 0;
+
+    $clean['use_public_ports'] = !empty($data['use_public_ports']) ? 1 : 0;
+
+    // Router-forwarded public ports are optional. A blank/omitted value falls
+    // back to the matching internal port at check time, so only validate when
+    // an actual number is supplied.
+    $publicPortSpecs = array(
+        'http' => isset($data['http_public_port']) ? $data['http_public_port'] : '',
+        'https' => isset($data['https_public_port']) ? $data['https_public_port'] : ''
+    );
+    foreach ($publicPortSpecs as $proto => $raw) {
+        $key = $proto . '_public_port';
+        $clean[$key] = '';
+        if ($raw !== '' && $raw !== null) {
+            $p = (int)$raw;
+            if ($p < 1 || $p > 65535) {
+                $errors[] = ucfirst($proto) . ' public port must be between 1 and 65535 (or left blank to use the internal port).';
+            } else {
+                $clean[$key] = $p;
+            }
+        }
+    }
 
     // Both ports off is a valid state: it simply turns external access off.
     // Only the ports that are actually enabled need to be sane.
@@ -1198,6 +1226,20 @@ function efppCheckHostPort($host, $port, $nodes = 2) {
     return array('reachable' => null, 'detail' => 'Remote check did not finish in time (try again).');
 }
 
+// The port the internet actually sees. If "Use Custom Port via Router
+// Firewall" is on and a value is set, that overrides the internal port the
+// plugin listens on (the router forwards the public port to the internal one).
+function efppPublicPort($s, $protocol) {
+    $internal = ($protocol === 'https') ? (int)($s['https_port'] ?? 8443) : (int)($s['port'] ?? 8080);
+    if (!empty($s['use_public_ports'] ?? 0)) {
+        $pub = (int)($s[$protocol . '_public_port'] ?? 0);
+        if ($pub >= 1 && $pub <= 65535) {
+            return $pub;
+        }
+    }
+    return $internal;
+}
+
 function efppPublicCheck($force = false) {
     $cacheFile = EFPP_PLUGIN_DIR . '/config/public-check.json';
     if (!$force && is_file($cacheFile)) {
@@ -1215,10 +1257,10 @@ function efppPublicCheck($force = false) {
 
     $ports = array();
     if (!empty($s['enable_http'] ?? 0)) {
-        $ports[] = array('scheme' => 'http', 'port' => (int)$s['port']);
+        $ports[] = array('scheme' => 'http', 'port' => efppPublicPort($s, 'http'));
     }
     if (!empty($s['enable_https'] ?? 0)) {
-        $ports[] = array('scheme' => 'https', 'port' => (int)$s['https_port']);
+        $ports[] = array('scheme' => 'https', 'port' => efppPublicPort($s, 'https'));
     }
 
     $checks = array();
