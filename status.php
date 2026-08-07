@@ -157,11 +157,16 @@ var efppStatus = {
                     ['Users', s.user_count > 0
                         ? s.users.map(escHtml).join(', ')
                         : '<span class="text-danger">None (' + (s.enabled ? 'plugin cannot stay enabled' : 'add a user to enable') + ')</span>'],
-                    ['Users count', s.user_count],
-                    ['Apache vhost enabled', s.apache_conf_enabled ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
-                    ['Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
-                    ['Internal URL', s.enabled && urls.length ? urls.join('<br>') : '<span class="text-secondary">-</span>']
+                    ['Users count', s.user_count]
                 );
+                // Apache/htpasswd internals are an Advanced-level setting.
+                if (efppStatus.uiLevel >= 1) {
+                    rows.push(
+                        [advIcon + 'Apache vhost enabled', s.apache_conf_enabled ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
+                        [advIcon + 'Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>']
+                    );
+                }
+                rows.push(['Internal URL', s.enabled && urls.length ? urls.join('<br>') : '<span class="text-secondary">-</span>']);
                 var html = '<table class="fppTable" style="width:auto;">';
                 for (var i = 0; i < rows.length; i++) {
                     html += '<tr><td style="padding:4px;"><b>' + rows[i][0] + ':</b></td><td style="padding:4px;">' + rows[i][1] + '</td></tr>';
