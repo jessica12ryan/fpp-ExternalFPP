@@ -59,6 +59,15 @@ include __DIR__ . '/tabs.inc';
                     </td>
                 </tr>
                 <tr>
+                    <td style="padding: 4px;"><b>Role:</b></td>
+                    <td style="padding: 4px;">
+                        <select id="efpp_new_role">
+                            <option value="user" selected>User (no dashboard access)</option>
+                            <option value="admin">Admin (full access)</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
                     <td style="padding: 4px;"></td>
                     <td style="padding: 4px;">
                         <input type="button" class="buttons" value="Add User" onclick="efppUsers.add();">
@@ -157,15 +166,24 @@ var efppUsers = {
         efppUsers.users = d.users || [];
 
         var html = '<table class="fppTable" style="width:auto;">';
-        html += '<tr><th style="padding:4px;text-align:left;">Username</th><th style="padding:4px;text-align:left;">Status</th><th style="padding:4px;"></th></tr>';
+        html += '<tr><th style="padding:4px;text-align:left;">Username</th><th style="padding:4px;text-align:left;">Role</th><th style="padding:4px;text-align:left;">Status</th><th style="padding:4px;"></th></tr>';
         if (efppUsers.users.length === 0) {
-            html += '<tr><td colspan="3"><span class="text-danger">No users configured.</span></td></tr>';
+            html += '<tr><td colspan="4"><span class="text-danger">No users configured.</span></td></tr>';
         }
         for (var i = 0; i < efppUsers.users.length; i++) {
             var u = efppUsers.users[i];
             var name = u.username || '';
+            var role = u.role || 'admin';
+            var roleBadge = role === 'admin'
+                ? '<span class="text-success"><b>Admin</b></span>'
+                : '<span class="text-warning"><b>User</b></span>';
+            var roleSelect = '<select data-user="' + escAttr(name) + '" onchange="efppUsers.setRole(this);">' +
+                '<option value="admin"' + (role === 'admin' ? ' selected' : '') + '>Admin</option>' +
+                '<option value="user"' + (role === 'user' ? ' selected' : '') + '>User</option>' +
+                '</select>';
             var badge = u.must_change ? '<span class="text-warning"><b>&#9888;</b> must change password</span>' : '<span class="text-success">OK</span>';
             html += '<tr><td style="padding:4px;"><b>' + escHtml(name) + '</b></td>' +
+                '<td style="padding:4px;">' + roleBadge + '<br>' + roleSelect + '</td>' +
                 '<td style="padding:4px;">' + badge + '</td>' +
                 '<td style="padding:4px;">' +
                 '<input type="button" class="buttons" value="Change Password" data-user="' + escAttr(name) + '" onclick="efppUsers.openModal(this);"> ' +
@@ -204,6 +222,7 @@ var efppUsers = {
         var password = $('#efpp_new_password').val();
         var confirm = $('#efpp_new_confirm').val();
         var mustChange = $('#efpp_new_must_change').is(':checked');
+        var role = $('#efpp_new_role').val();
         $('#efpp_users_result').html('<span class="text-warning">Adding user...</span>');
         $.ajax({
             url: efppUsers.apiBase + '/add-user',
@@ -213,7 +232,8 @@ var efppUsers = {
                 username: username,
                 password: password,
                 password_confirm: confirm,
-                must_change: mustChange ? 1 : 0
+                must_change: mustChange ? 1 : 0,
+                role: role
             }),
             dataType: 'json',
             success: function(data) {
@@ -223,6 +243,7 @@ var efppUsers = {
                     $('#efpp_new_password').val('');
                     $('#efpp_new_confirm').val('');
                     $('#efpp_new_must_change').prop('checked', false);
+                    $('#efpp_new_role').val('user');
                 }
             },
             error: function(xhr) {
@@ -275,6 +296,32 @@ var efppUsers = {
             },
             error: function(xhr) {
                 efppUsers.showCpResult({ success: false, errors: ['Could not reach the plugin API. Check the FPP web server logs.'] });
+            }
+        });
+    },
+
+    setRole: function(sel) {
+        var username = sel.getAttribute('data-user');
+        var role = sel.value;
+        $('#efpp_users_result').html('<span class="text-warning">Updating role for ' + escHtml(username) + '...</span>');
+        $.ajax({
+            url: efppUsers.apiBase + '/set-user-role',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ username: username, role: role }),
+            dataType: 'json',
+            success: function(data) {
+                if (data.success) {
+                    efppUsers.handleResponse(data);
+                } else {
+                    var msg = (data.errors || ['Could not update the role.']).join('<br>');
+                    $('#efpp_users_result').html('<span class="text-danger"><b>Errors:</b><br>' + escHtml(msg) + '</span>');
+                    efppUsers.refresh();
+                }
+            },
+            error: function(xhr) {
+                efppUsers.handleResponse({ success: false, errors: ['Could not reach the plugin API. Check the FPP web server logs.'] });
+                efppUsers.refresh();
             }
         });
     },

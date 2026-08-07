@@ -204,17 +204,14 @@ var efpp = {
         efpp.saved.https_port = String(s.https_port);
         efpp.saved.backend_port = String(s.backend_port);
         var host = window.location.hostname;
-        var scheme = s.enable_https ? 'https' : 'http';
-        var uport = s.enable_https ? s.https_port : s.port;
-        var url = scheme + '://' + host + ':' + uport + '/';
-        if (!s.enable_http && !s.enable_https) {
-            url = null;
-        }
+        var urls = [];
+        if (s.enable_http) urls.push('<a href="http://' + host + ':' + s.port + '/" target="_blank">http://' + host + ':' + s.port + '/</a>');
+        if (s.enable_https) urls.push('<a href="https://' + host + ':' + s.https_port + '/" target="_blank">https://' + host + ':' + s.https_port + '/</a>');
         $('#efpp_status_text').html(efpp.enabled
             ? '<span class="text-success">&#9679; Enabled</span>'
             : '<span class="text-danger">&#9679; Disabled</span>');
-        $('#efpp_url_cell').html(efpp.enabled && url
-            ? '<a href="' + url + '" target="_blank">' + url + '</a>'
+        $('#efpp_url_cell').html(efpp.enabled && urls.length
+            ? urls.join(' &nbsp; ')
             : '<span class="text-secondary">Disabled</span>');
     },
 

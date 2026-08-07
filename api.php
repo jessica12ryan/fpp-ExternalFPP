@@ -86,10 +86,15 @@ function efppUsersFromSettings($s) {
     $users = array();
     foreach (($s['users'] ?? array()) as $u) {
         if (is_array($u) && isset($u['username']) && trim((string)$u['username']) !== '') {
+            // A named role defaults to admin so accounts created before roles
+            // existed remain fully privileged. Only the literal "user" is
+            // treated as the limited role.
+            $role = (string)($u['role'] ?? 'admin');
             $users[] = array(
                 'username' => trim((string)$u['username']),
                 'password' => (string)($u['password'] ?? ''),
-                'must_change' => !empty($u['must_change']) ? 1 : 0
+                'must_change' => !empty($u['must_change']) ? 1 : 0,
+                'role' => ($role === 'user') ? 'user' : 'admin'
             );
         }
     }
@@ -338,6 +343,9 @@ function efppLoginPageEndpoint() {
 }
 
 function efppSaveLoginPageEndpoint() {
+    if (efppSessionIsUser()) {
+        return efppAdminOnlyError();
+    }
     $data = $_POST;
     if (empty($data)) {
         $raw = json_decode(file_get_contents('php://input'), true);
@@ -365,6 +373,9 @@ function efppSaveLoginPageEndpoint() {
 }
 
 function efppResetLoginPageEndpoint() {
+    if (efppSessionIsUser()) {
+        return efppAdminOnlyError();
+    }
     return efppResetPage(EFPP_LOGIN_PAGE_FILE, 'efppDefaultLoginPage', 'login page');
 }
 
@@ -420,10 +431,16 @@ function efppGetChangePasswordPageEndpoint() {
 }
 
 function efppSaveChangePasswordPageEndpoint() {
+    if (efppSessionIsUser()) {
+        return efppAdminOnlyError();
+    }
     return efppSavePage(EFPP_CHANGE_PW_FILE, 'efppValidateChangePasswordPage', 'change password page');
 }
 
 function efppResetChangePasswordPageEndpoint() {
+    if (efppSessionIsUser()) {
+        return efppAdminOnlyError();
+    }
     return efppResetPage(EFPP_CHANGE_PW_FILE, 'efppDefaultChangePasswordPage', 'change password page');
 }
 
@@ -545,6 +562,9 @@ function efppStatusEndpoint() {
 }
 
 function efppSaveEndpoint() {
+    if (efppSessionIsUser()) {
+        return efppAdminOnlyError();
+    }
     $data = $_POST;
     if (empty($data)) {
         $raw = json_decode(file_get_contents('php://input'), true);
@@ -573,6 +593,9 @@ function efppSaveEndpoint() {
 }
 
 function efppRestartEndpoint() {
+    if (efppSessionIsUser()) {
+        return efppAdminOnlyError();
+    }
     efppLog('Restart requested');
     $result = efppRunApply();
     $result['settings'] = efppStatusData();
@@ -648,7 +671,7 @@ function efppUsersEndpoint() {
     $s = efppLoadSettings();
     $userList = array();
     foreach (efppUsersFromSettings($s) as $u) {
-        $userList[] = array('username' => $u['username'], 'must_change' => !empty($u['must_change']) ? 1 : 0);
+        $userList[] = array('username' => $u['username'], 'must_change' => !empty($u['must_change']) ? 1 : 0, 'role' => $u['role']);
     }
     return json(array('success' => true, 'users' => $userList, 'enabled' => ((!empty($s['enable_http'] ?? 0)) || (!empty($s['enable_https'] ?? 0))) ? 1 : 0));
 }
@@ -677,6 +700,28 @@ function efppSessionUser() {
         }
     }
     return '';
+}
+
+/**
+ * Returns true only when the current visitor is a known account with the
+ * limited "user" role. Accounts browsing the normal FPP port (no plugin
+ * session) and administrators both return false, so those keep full access.
+ */
+function efppSessionIsUser() {
+    $user = efppSessionUser();
+    if ($user === '') {
+        return false;
+    }
+    foreach (efppUsersList() as $u) {
+        if (strcasecmp($u['username'], $user) === 0) {
+            return $u['role'] === 'user';
+        }
+    }
+    return false;
+}
+
+function efppAdminOnlyError() {
+    return json(array('success' => false, 'messages' => array(), 'errors' => array('This action requires an Administrator account.')));
 }
 
 function efppGetSessionUserEndpoint() {
@@ -795,18 +840,30 @@ function efppRequestData() {
 }
 
 function efppAddUserEndpoint() {
+    if (efppSessionIsUser()) {
+        return efppAdminOnlyError();
+    }
     $data = efppRequestData();
     $username = trim((string)($data['username'] ?? ''));
     $password = (string)($data['password'] ?? '');
     $confirm = (string)($data['password_confirm'] ?? '');
+    $role = strtolower(trim((string)($data['role'] ?? 'user')));
 
     $users = efppUsersList();
     $errors = efppValidateLoginUser($username, $password, $confirm, true, $users);
+    if ($role !== 'admin' && $role !== 'user') {
+        $errors[] = 'Role must be either "admin" or "user".';
+    }
     if (!empty($errors)) {
         return json(array('success' => false, 'messages' => array(), 'errors' => $errors));
     }
 
-    $users[] = array('username' => $username, 'password' => efppHashPassword($password), 'must_change' => !empty($data['must_change']) ? 1 : 0);
+    $users[] = array(
+        'username' => $username,
+        'password' => efppHashPassword($password),
+        'must_change' => !empty($data['must_change']) ? 1 : 0,
+        'role' => $role
+    );
     if (efppSaveSettingsFile(array_merge(efppLoadSettings(), array('users' => $users))) === false) {
         return json(array('success' => false, 'messages' => array(), 'errors' => array('Could not write the settings file. Check file permissions.')));
     }
@@ -820,6 +877,9 @@ function efppAddUserEndpoint() {
 }
 
 function efppSetPasswordEndpoint() {
+    if (efppSessionIsUser()) {
+        return efppAdminOnlyError();
+    }
     $data = efppRequestData();
     $username = trim((string)($data['username'] ?? ''));
     $password = (string)($data['password'] ?? '');
@@ -861,6 +921,9 @@ function efppSetPasswordEndpoint() {
 }
 
 function efppDeleteUserEndpoint() {
+    if (efppSessionIsUser()) {
+        return efppAdminOnlyError();
+    }
     $data = efppRequestData();
     $username = trim((string)($data['username'] ?? ''));
 
@@ -894,6 +957,52 @@ function efppDeleteUserEndpoint() {
     $usernames = array();
     foreach ($kept as $u) $usernames[] = $u['username'];
     return json(array('success' => $ok, 'messages' => array($msg), 'errors' => $ok ? array() : array($msg), 'users' => $usernames));
+}
+
+function efppSetUserRoleEndpoint() {
+    if (efppSessionIsUser()) {
+        return efppAdminOnlyError();
+    }
+    $data = efppRequestData();
+    $username = trim((string)($data['username'] ?? ''));
+    $role = strtolower(trim((string)($data['role'] ?? '')));
+    if ($role !== 'admin' && $role !== 'user') {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('Role must be either "admin" or "user".')));
+    }
+
+    $s = efppLoadSettings();
+    $users = efppUsersFromSettings($s);
+
+    $found = -1;
+    foreach ($users as $i => $u) {
+        if (strcasecmp($u['username'], $username) === 0) {
+            $found = $i;
+            break;
+        }
+    }
+    if ($found < 0) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('User not found: ' . $username)));
+    }
+
+    if (strcasecmp($users[$found]['username'], efppSessionUser()) === 0) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('You cannot change your own role.')));
+    }
+    if ($users[$found]['role'] === 'admin' && $role === 'user') {
+        $admins = 0;
+        foreach ($users as $u) {
+            if ($u['role'] === 'admin') $admins++;
+        }
+        if ($admins <= 1) {
+            return json(array('success' => false, 'messages' => array(), 'errors' => array('Cannot demote the last admin.')));
+        }
+    }
+
+    $users[$found]['role'] = $role;
+    if (efppSaveSettingsFile(array_merge($s, array('users' => $users))) === false) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('Could not write the settings file. Check file permissions.')));
+    }
+    efppLog('Role changed for user: ' . $username . ' -> ' . $role);
+    return json(array('success' => true, 'messages' => array('Role updated for ' . $username . '.'), 'errors' => array()));
 }
 
 function efppLogsEndpoint() {
@@ -1111,6 +1220,7 @@ function getEndpointsfppExternalFPP() {
     $result[] = array('method' => 'POST', 'endpoint' => 'add-user', 'callback' => 'efppAddUserEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'set-user-password', 'callback' => 'efppSetPasswordEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'delete-user', 'callback' => 'efppDeleteUserEndpoint');
+    $result[] = array('method' => 'POST', 'endpoint' => 'set-user-role', 'callback' => 'efppSetUserRoleEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'session-user', 'callback' => 'efppGetSessionUserEndpoint');
     $result[] = array('method' => 'GET', 'endpoint' => 'login-success', 'callback' => 'efppLoginSuccessEndpoint');
     // Some clients (and curl -L) re-send the original method when following the

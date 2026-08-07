@@ -113,9 +113,15 @@ var efppStatus = {
             dataType: 'json',
             success: function(s) {
                 var host = window.location.hostname;
-                var scheme = s.enable_https ? 'https' : 'http';
-                var uport = s.enable_https ? s.https_port : s.port;
-                var url = (s.enable_http || s.enable_https) ? scheme + '://' + host + ':' + uport + '/' : null;
+                var urls = [];
+                if (s.enable_http) {
+                    var hu = 'http://' + host + ':' + s.port + '/';
+                    urls.push('<a href="' + escAttr(hu) + '" target="_blank">' + escHtml(hu) + '</a>');
+                }
+                if (s.enable_https) {
+                    var su = 'https://' + host + ':' + s.https_port + '/';
+                    urls.push('<a href="' + escAttr(su) + '" target="_blank">' + escHtml(su) + '</a>');
+                }
                 var rows = [
                     ['Plugin configured', s.configured ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['FPP UI Reachable', s.backend_port],
@@ -133,22 +139,13 @@ var efppStatus = {
                     ['Users count', s.user_count],
                     ['Apache vhost enabled', s.apache_conf_enabled ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
-                    ['FPP built-in UI password', s.fpp_ui_password ? '<span class="text-warning">Enabled</span>' : '<span class="text-success">Not set</span>'],
-                    ['External URL', s.enabled && url ? '<a href="' + url + '" target="_blank">' + url + '</a>' : '<span class="text-secondary">-</span>']
+                    ['External URL', s.enabled && urls.length ? urls.join(' &nbsp; ') : '<span class="text-secondary">-</span>']
                 ];
                 var html = '<table class="fppTable" style="width:auto;">';
                 for (var i = 0; i < rows.length; i++) {
                     html += '<tr><td style="padding:4px;"><b>' + rows[i][0] + ':</b></td><td style="padding:4px;">' + rows[i][1] + '</td></tr>';
                 }
                 html += '</table>';
-                if (s.fpp_ui_password) {
-                    html += '<div class="alert alert-warning" style="margin-top:8px;">' +
-                        '<b>FPP\'s built-in UI password is enabled.</b> FPP normally skips its own password for ' +
-                        'requests that come from the FPP itself (this plugin proxies through the local machine), ' +
-                        'so the extra port usually only asks for the password configured here (via the login page). ' +
-                        'If your FPP is configured differently, you may also be asked for FPP\'s own admin password ' +
-                        '(username <code>admin</code>) on the external port.</div>';
-                }
                 if (!s.enabled && s.configured) {
                     html += '<p class="text-warning" style="margin-top:8px;">The external port is currently disabled. Go to the Config tab to enable it.</p>';
                 }

@@ -93,9 +93,11 @@ function efppUsersFromSettings($s) {
     $users = array();
     foreach (($s['users'] ?? array()) as $u) {
         if (is_array($u) && isset($u['username']) && trim((string)$u['username']) !== '') {
+            $role = (string)($u['role'] ?? 'admin');
             $users[] = array(
                 'username' => trim((string)$u['username']),
-                'password' => (string)($u['password'] ?? '')
+                'password' => (string)($u['password'] ?? ''),
+                'role' => ($role === 'user') ? 'user' : 'admin'
             );
         }
     }

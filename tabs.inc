@@ -15,6 +15,26 @@ function efpp_tab_active($page) {
 	return $current === $page ? 'active' : '';
 }
 
+// Session-based page guard. Accounts with the limited "user" role are not
+// allowed to view any plugin dashboard page. Reuse api.php's resolver (which
+// only identifies someone who logged in via the external port) so everything
+// stays consistent; a visitor with no session (normal FPP port / built-in
+// admin) is never blocked.
+if (!function_exists('efppSessionIsUser')) {
+	require_once __DIR__ . '/api.php';
+}
+if (efppSessionIsUser()) {
+	?>
+	<div class="p-3">
+		<div class="alert alert-danger" style="margin-top:12px;">
+			<b>Access denied.</b> Your account has the limited "User" role and cannot view the
+			External FPP dashboard. Contact an administrator if you believe this is a mistake.
+		</div>
+	</div>
+	<?php
+	exit;
+}
+
 // UI level controls which advanced features are shown. The value is read from
 // FPP's runtime settings ("uiLevel"), which is an integer:
 //   Basic=0, Advanced=1, Experimental=2, Developer=3
