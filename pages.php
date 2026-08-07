@@ -208,11 +208,13 @@ document.getElementById("save").addEventListener("click", function () {
 </div>
 
 <script>
-// Bundled originals (slashes escaped so embedded HTML can't break out of the
-// script block). Used to flag when the live page has been customised.
+// Bundled originals, embedded safely for JavaScript. JSON_HEX_TAG escapes the
+// angle brackets as \u003C/\u003E (which decode back to the exact original), so
+// a "</script>" in a template can't break out of this script block while the
+// comparison in efppCustomBadge still sees the true template text.
 var EFPP_TPL = {
-    login: <?php echo json_encode(str_replace('</', '<\\/', $loginTpl)); ?>,
-    change: <?php echo json_encode(str_replace('</', '<\\/', $changeTpl)); ?>
+    login: <?php echo json_encode($loginTpl, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES); ?>,
+    change: <?php echo json_encode($changeTpl, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES); ?>
 };
 
 function efppCustomBadge(page) {
