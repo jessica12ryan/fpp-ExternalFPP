@@ -167,6 +167,12 @@ var efppStatus = {
                     );
                 }
                 rows.push(['Internal URL', s.enabled && urls.length ? urls.join('<br>') : '<span class="text-secondary">-</span>']);
+                var extUrls = [];
+                if (s.external_http_url) extUrls.push('<a href="' + escAttr(s.external_http_url) + '" target="_blank">' + escHtml(s.external_http_url) + '</a>');
+                if (s.external_https_url) extUrls.push('<a href="' + escAttr(s.external_https_url) + '" target="_blank">' + escHtml(s.external_https_url) + '</a>');
+                rows.push(['External URL', extUrls.length
+                    ? extUrls.join('<br>')
+                    : '<span class="text-secondary">' + (s.public_ip ? '- (external disabled or not checked)' : 'run the Public Accessibility check below to determine the public address.') + '</span>']);
                 var html = '<table class="fppTable" style="width:auto;">';
                 for (var i = 0; i < rows.length; i++) {
                     html += '<tr><td style="padding:4px;"><b>' + rows[i][0] + ':</b></td><td style="padding:4px;">' + rows[i][1] + '</td></tr>';

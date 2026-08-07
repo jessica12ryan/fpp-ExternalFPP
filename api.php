@@ -494,6 +494,22 @@ function efppStatusData() {
     foreach ($users as $u) {
         $usernames[] = $u['username'];
     }
+
+    // Public IP from the last public-access check (cached; we never do a live
+    // outbound lookup here because /status is polled every few seconds).
+    $publicIp = '';
+    $cacheFile = EFPP_PLUGIN_DIR . '/config/public-check.json';
+    if (is_file($cacheFile)) {
+        $cached = json_decode(@file_get_contents($cacheFile), true);
+        if (is_array($cached) && !empty($cached['public_ip'])) {
+            $publicIp = $cached['public_ip'];
+        }
+    }
+    $externalHttpUrl = (!empty($s['enable_http'] ?? 0) && $publicIp !== '')
+        ? 'http://' . $publicIp . ':' . efppPublicPort($s, 'http') . '/' : '';
+    $externalHttpsUrl = (!empty($s['enable_https'] ?? 0) && $publicIp !== '')
+        ? 'https://' . $publicIp . ':' . efppPublicPort($s, 'https') . '/' : '';
+
     return array(
         'configured' => file_exists(EFPP_SETTINGS_FILE) ? 1 : 0,
         'enabled' => ((!empty($s['enable_http'] ?? 0)) || (!empty($s['enable_https'] ?? 0))) ? 1 : 0,
@@ -507,6 +523,9 @@ function efppStatusData() {
         'https_public_port' => isset($s['https_public_port']) ? (string)$s['https_public_port'] : '',
         'forwarded_http_port' => efppPublicPort($s, 'http'),
         'forwarded_https_port' => efppPublicPort($s, 'https'),
+        'public_ip' => $publicIp,
+        'external_http_url' => $externalHttpUrl,
+        'external_https_url' => $externalHttpsUrl,
         'users' => $usernames,
         'user_count' => count($usernames),
         'apache_conf_enabled' => file_exists(EFPP_APACHE_CONF_ENABLED) ? 1 : 0,
