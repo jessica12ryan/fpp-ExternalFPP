@@ -12,6 +12,14 @@
 
 $efppIconUrl = 'api/plugin/fpp-ExternalFPP/icon?v=' . filemtime(__DIR__ . '/icon.png');
 
+// When the visitor is logged in with the limited "user" role, hide the External
+// FPP sub-menu entries (Status/Control, Content Setup, and Help). The Logout
+// item further below is still shown so limited users can sign out.
+if (!function_exists('efppSessionIsUser')) {
+	require_once __DIR__ . '/api.php';
+}
+$efppIsLimitedUser = efppSessionIsUser();
+
 $menuEntries = Array(
 	Array(
 		'text' => '<img src="' . $efppIconUrl . '" width="16" height="16" class="align-middle me-1"> External FPP',
@@ -34,6 +42,9 @@ $menuEntries = Array(
 );
 
 foreach ($menuEntries as $entry) {
+	if ($efppIsLimitedUser)
+		break;
+
 	if ($entry['type'] != $menu)
 		continue;
 

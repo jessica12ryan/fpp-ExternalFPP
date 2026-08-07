@@ -211,7 +211,7 @@ var efpp = {
             ? '<span class="text-success">&#9679; Enabled</span>'
             : '<span class="text-danger">&#9679; Disabled</span>');
         $('#efpp_url_cell').html(efpp.enabled && urls.length
-            ? urls.join(' &nbsp; ')
+            ? urls.join('<br>')
             : '<span class="text-secondary">Disabled</span>');
     },
 

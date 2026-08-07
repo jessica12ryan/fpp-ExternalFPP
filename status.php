@@ -139,7 +139,7 @@ var efppStatus = {
                     ['Users count', s.user_count],
                     ['Apache vhost enabled', s.apache_conf_enabled ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
-                    ['External URL', s.enabled && urls.length ? urls.join(' &nbsp; ') : '<span class="text-secondary">-</span>']
+                    ['External URL', s.enabled && urls.length ? urls.join('<br>') : '<span class="text-secondary">-</span>']
                 ];
                 var html = '<table class="fppTable" style="width:auto;">';
                 for (var i = 0; i < rows.length; i++) {
