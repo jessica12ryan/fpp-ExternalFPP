@@ -343,7 +343,7 @@ function efppLoginPageEndpoint() {
 }
 
 function efppSaveLoginPageEndpoint() {
-    if (efppSessionIsUser()) {
+    if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
     $data = $_POST;
@@ -373,7 +373,7 @@ function efppSaveLoginPageEndpoint() {
 }
 
 function efppResetLoginPageEndpoint() {
-    if (efppSessionIsUser()) {
+    if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
     return efppResetPage(EFPP_LOGIN_PAGE_FILE, 'efppDefaultLoginPage', 'login page');
@@ -431,14 +431,14 @@ function efppGetChangePasswordPageEndpoint() {
 }
 
 function efppSaveChangePasswordPageEndpoint() {
-    if (efppSessionIsUser()) {
+    if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
     return efppSavePage(EFPP_CHANGE_PW_FILE, 'efppValidateChangePasswordPage', 'change password page');
 }
 
 function efppResetChangePasswordPageEndpoint() {
-    if (efppSessionIsUser()) {
+    if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
     return efppResetPage(EFPP_CHANGE_PW_FILE, 'efppDefaultChangePasswordPage', 'change password page');
@@ -562,7 +562,7 @@ function efppStatusEndpoint() {
 }
 
 function efppSaveEndpoint() {
-    if (efppSessionIsUser()) {
+    if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
     $data = $_POST;
@@ -593,7 +593,7 @@ function efppSaveEndpoint() {
 }
 
 function efppRestartEndpoint() {
-    if (efppSessionIsUser()) {
+    if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
     efppLog('Restart requested');
@@ -724,6 +724,41 @@ function efppAdminOnlyError() {
     return json(array('success' => false, 'messages' => array(), 'errors' => array('This action requires an Administrator account.')));
 }
 
+/**
+ * True when the request is arriving through the external (password-protected)
+ * proxy port: the Host header carries the plugin's configured HTTP or HTTPS
+ * port, or the external vhost forwarded X-Remote-User. Requests on the normal
+ * FPP port (no plugin proxy) return false.
+ */
+function efppRequestIsExternal() {
+    $port = 0;
+    $httpsPort = 0;
+    if (file_exists(EFPP_SETTINGS_FILE)) {
+        $s = json_decode(@file_get_contents(EFPP_SETTINGS_FILE), true);
+        if (is_array($s)) {
+            if (!empty($s['port'])) {
+                $port = (int)$s['port'];
+            }
+            if (!empty($s['https_port'])) {
+                $httpsPort = (int)$s['https_port'];
+            }
+        }
+    }
+    $hostPort = (int)parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_PORT);
+    return ($port > 0 && $hostPort === $port)
+        || ($httpsPort > 0 && $hostPort === $httpsPort)
+        || !empty($_SERVER['HTTP_X_REMOTE_USER']);
+}
+
+/**
+ * The API-level equivalent of the page guard: a request is only treated as
+ * coming from a limited "user" account when it arrives through the external
+ * port. On the normal FPP port everyone keeps full access.
+ */
+function efppSessionIsLimited() {
+    return efppRequestIsExternal() && efppSessionIsUser();
+}
+
 function efppGetSessionUserEndpoint() {
     $user = efppSessionUser();
     if ($user === '') {
@@ -840,7 +875,7 @@ function efppRequestData() {
 }
 
 function efppAddUserEndpoint() {
-    if (efppSessionIsUser()) {
+    if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
     $data = efppRequestData();
@@ -877,7 +912,7 @@ function efppAddUserEndpoint() {
 }
 
 function efppSetPasswordEndpoint() {
-    if (efppSessionIsUser()) {
+    if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
     $data = efppRequestData();
@@ -921,7 +956,7 @@ function efppSetPasswordEndpoint() {
 }
 
 function efppDeleteUserEndpoint() {
-    if (efppSessionIsUser()) {
+    if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
     $data = efppRequestData();
@@ -960,7 +995,7 @@ function efppDeleteUserEndpoint() {
 }
 
 function efppSetUserRoleEndpoint() {
-    if (efppSessionIsUser()) {
+    if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
     $data = efppRequestData();
