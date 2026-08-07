@@ -118,21 +118,21 @@ var efppStatus = {
                 var url = (s.enable_http || s.enable_https) ? scheme + '://' + host + ':' + uport + '/' : null;
                 var rows = [
                     ['Plugin configured', s.configured ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
+                    ['FPP UI Reachable', s.backend_port],
                     ['External access', s.enabled ? '<span class="text-success">&#9679; Enabled</span>' : '<span class="text-danger">&#9679; Disabled</span>'],
                     ['HTTP enabled', s.enable_http ? '<span class="text-success">Yes</span>' : '<span class="text-secondary">No</span>'],
-                    ['HTTPS enabled', s.enable_https ? '<span class="text-success">Yes</span>' : '<span class="text-secondary">No</span>'],
                     ['HTTP port', s.enable_http ? s.port : '<span class="text-secondary">-</span>'],
+                    ['HTTP port listening', s.enable_http ? (s.listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>'],
+                    ['HTTPS enabled', s.enable_https ? '<span class="text-success">Yes</span>' : '<span class="text-secondary">No</span>'],
                     ['HTTPS port', s.enable_https ? s.https_port : '<span class="text-secondary">-</span>'],
-                    ['Backend (FPP web) port', s.backend_port],
+                    ['HTTPS port listening', s.enable_https ? (s.https_listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>'],
+
                     ['Users', s.user_count > 0
                         ? s.users.map(escHtml).join(', ')
                         : '<span class="text-danger">None (' + (s.enabled ? 'plugin cannot stay enabled' : 'add a user to enable') + ')</span>'],
                     ['Users count', s.user_count],
                     ['Apache vhost enabled', s.apache_conf_enabled ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
-                    ['HTTP port listening', s.enable_http ? (s.listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>'],
-                    ['HTTPS port listening', s.enable_https ? (s.https_listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>'],
-                    ['Backend FPP web reachable', s.backend_reachable ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
                     ['FPP built-in UI password', s.fpp_ui_password ? '<span class="text-warning">Enabled</span>' : '<span class="text-success">Not set</span>'],
                     ['External URL', s.enabled && url ? '<a href="' + url + '" target="_blank">' + url + '</a>' : '<span class="text-secondary">-</span>']
                 ];

@@ -152,7 +152,6 @@ if (file_exists($settingsFile)) {
                     over TLS using FPP's built-in self-signed certificate (your browser will show a
                     certificate warning, which is normal for a self-signed cert). To force HTTPS, enable only
                     the HTTPS port.</li>
-                <li>If FPP's built-in UI Password is also set, access through this port may prompt for that password as well, depending on FPP's configuration.</li>
                 <li>This plugin uses FPP's existing Apache web server &mdash; no additional packages are required.</li>
             </ul>
         </div>
