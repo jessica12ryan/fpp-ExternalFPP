@@ -132,14 +132,20 @@ var efppStatus = {
                 if (efppStatus.uiLevel >= 2 && s.backend_port !== 80) {
                     rows.push([expIcon + 'Backend port (FPP UI)', s.backend_port]);
                 }
-                rows.push(
-                    ['HTTP enabled', s.enable_http ? '<span class="text-success">Yes</span>' : '<span class="text-secondary">No</span>'],
-                    ['HTTP port', s.enable_http ? s.port : '<span class="text-secondary">-</span>'],
-                    ['HTTP port listening', s.enable_http ? (s.listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>'],
-                    ['HTTPS enabled', s.enable_https ? '<span class="text-success">Yes</span>' : '<span class="text-secondary">No</span>'],
-                    ['HTTPS port', s.enable_https ? s.https_port : '<span class="text-secondary">-</span>'],
-                    ['HTTPS port listening', s.enable_https ? (s.https_listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>') : '<span class="text-secondary">-</span>']
-                );
+                rows.push(['HTTP enabled', s.enable_http ? '<span class="text-success">Yes</span>' : '<span class="text-secondary">No</span>']);
+                if (s.enable_http) {
+                    rows.push(
+                        ['HTTP port', s.port],
+                        ['HTTP port listening', s.listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>']
+                    );
+                }
+                rows.push(['HTTPS enabled', s.enable_https ? '<span class="text-success">Yes</span>' : '<span class="text-secondary">No</span>']);
+                if (s.enable_https) {
+                    rows.push(
+                        ['HTTPS port', s.https_port],
+                        ['HTTPS port listening', s.https_listening ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>']
+                    );
+                }
                 // Forwarded (router) ports only apply when "Use Custom Port via Router Firewall" is on, and are an Advanced-level setting.
                 if (efppStatus.uiLevel >= 1 && s.use_public_ports) {
                     rows.push(
