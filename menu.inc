@@ -12,9 +12,39 @@
 
 $efppIconUrl = 'api/plugin/fpp-ExternalFPP/icon?v=' . filemtime(__DIR__ . '/icon.png');
 
-// When the visitor is logged in with the limited "user" role, hide the External
-// FPP sub-menu entries (Status/Control, Content Setup, and Help). The Logout
-// item further below is still shown so limited users can sign out.
+// Detect whether the visitor is using the external (password-protected) port.
+// Two signals identify that:
+//   1. The Host header carries the plugin's configured HTTP or HTTPS port. Pages on
+//      the external port can only be seen once logged in (everything is
+//      protected), and the external vhost preserves the Host header when
+//      proxying to the FPP backend.
+//   2. The external vhost forwarded X-Remote-User from the Apache session.
+// Visitors on the normal FPP backend port see neither, so the regular UI is
+// unaffected (e.g. a leftover session cookie from the external port must not
+// hide menu items here).
+$efppPort = 0;
+$efppHttpsPort = 0;
+$efppCfg = __DIR__ . '/config/settings.json';
+if (file_exists($efppCfg)) {
+	$efppS = json_decode(@file_get_contents($efppCfg), true);
+	if (is_array($efppS)) {
+		if (!empty($efppS['port'])) {
+			$efppPort = (int)$efppS['port'];
+		}
+		if (!empty($efppS['https_port'])) {
+			$efppHttpsPort = (int)$efppS['https_port'];
+		}
+	}
+}
+$efppHostPort = (int)parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_PORT);
+$efppExternal = ($efppPort > 0 && $efppHostPort === $efppPort)
+	|| ($efppHttpsPort > 0 && $efppHostPort === $efppHttpsPort)
+	|| !empty($_SERVER['HTTP_X_REMOTE_USER']);
+
+// When the visitor is on the external port with the limited "user" role, hide
+// the External FPP sub-menu entries (Status/Control, Content Setup, and Help).
+// The Logout item further below is still shown so limited users can sign out.
+// This applies only on the external port, so the regular FPP UI is unaffected.
 if (!function_exists('efppSessionIsUser')) {
 	require_once __DIR__ . '/api.php';
 }
@@ -42,7 +72,7 @@ $menuEntries = Array(
 );
 
 foreach ($menuEntries as $entry) {
-	if ($efppIsLimitedUser)
+	if ($efppExternal && $efppIsLimitedUser)
 		break;
 
 	if ($entry['type'] != $menu)
@@ -62,33 +92,7 @@ foreach ($menuEntries as $entry) {
 }
 
 // Only show the Logout item when the visitor is actually using the external
-// (password-protected) port. Two signals identify that:
-//   1. The Host header carries the plugin's configured HTTP or HTTPS port. Pages on
-//      the external port can only be seen once logged in (everything is
-//      protected), and the external vhost preserves the Host header when
-//      proxying to the FPP backend.
-//   2. The external vhost forwarded X-Remote-User from the Apache session.
-// Users browsing the normal FPP backend port see neither, so the regular UI is
-// unaffected.
-$efppPort = 0;
-$efppHttpsPort = 0;
-$efppCfg = __DIR__ . '/config/settings.json';
-if (file_exists($efppCfg)) {
-	$efppS = json_decode(@file_get_contents($efppCfg), true);
-	if (is_array($efppS)) {
-		if (!empty($efppS['port'])) {
-			$efppPort = (int)$efppS['port'];
-		}
-		if (!empty($efppS['https_port'])) {
-			$efppHttpsPort = (int)$efppS['https_port'];
-		}
-	}
-}
-$efppHostPort = (int)parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_PORT);
-$efppExternal = ($efppPort > 0 && $efppHostPort === $efppPort)
-	|| ($efppHttpsPort > 0 && $efppHostPort === $efppHttpsPort)
-	|| !empty($_SERVER['HTTP_X_REMOTE_USER']);
-
+// (password-protected) port (see $efppExternal above).
 if ($menu == 'status' && $efppExternal) {
 	// The logout handler is local to the external vhost, so link to it
 	// relative (same host/port the page is currently served from).
