@@ -108,9 +108,9 @@ if (file_exists($settingsFile)) {
                         <?php echo efppHelp('TLS (https) port. The plugin uses FPP\'s built-in self-signed certificate.'); ?>
                     </td>
                 </tr>
-                <?php if (!empty($efpp_ui_level) && $efpp_ui_level >= 2): ?>
+                <?php if (!empty($efpp_ui_level) && $efpp_ui_level >= 1): ?>
                 <tr>
-                    <td style="padding: 4px;"><i class="fas fa-fw fa-flask ui-level-2"></i> <b>Use Custom Port via Router Firewall:</b></td>
+                    <td style="padding: 4px;"><i class="fas fa-fw fa-graduation-cap ui-level-1"></i> <b>Use Custom Port via Router Firewall:</b></td>
                     <td style="padding: 4px;">
                         <input type="checkbox" id="efpp_use_public_ports"
                                onchange="efpp.togglePublicPorts();"
@@ -120,7 +120,7 @@ if (file_exists($settingsFile)) {
                 </tr>
                 <tbody id="efpp_public_ports_row">
                 <tr>
-                    <td style="padding: 4px;"><b>HTTP public port:</b></td>
+                    <td style="padding: 4px;"><i class="fas fa-fw fa-graduation-cap ui-level-1"></i> <b>HTTP public port:</b></td>
                     <td style="padding: 4px;">
                         <input type="number" id="efpp_http_public_port" min="1" max="65535" size="8"
                                onblur="efpp.onBlur('efpp_http_public_port');"
@@ -129,7 +129,7 @@ if (file_exists($settingsFile)) {
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding: 4px;"><b>HTTPS public port:</b></td>
+                    <td style="padding: 4px;"><i class="fas fa-fw fa-graduation-cap ui-level-1"></i> <b>HTTPS public port:</b></td>
                     <td style="padding: 4px;">
                         <input type="number" id="efpp_https_public_port" min="1" max="65535" size="8"
                                onblur="efpp.onBlur('efpp_https_public_port');"
@@ -138,6 +138,8 @@ if (file_exists($settingsFile)) {
                     </td>
                 </tr>
                 </tbody>
+                <?php endif; ?>
+                <?php if (!empty($efpp_ui_level) && $efpp_ui_level >= 2): ?>
                 <tr>
                     <td style="padding: 4px;"><i class="fas fa-fw fa-flask ui-level-2"></i> <b>Backend port (FPP UI):</b></td>
                     <td style="padding: 4px;">
