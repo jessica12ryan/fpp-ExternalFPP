@@ -15,7 +15,7 @@ include __DIR__ . '/tabs.inc';
 
 <div style="margin:0 auto;">
     <fieldset class="border p-3">
-        <legend>Users</legend>
+        <legend>External FPP Users</legend>
         <div class="p-3">
             <p>
                 These users can log in to the external (password-protected) port via the login page.

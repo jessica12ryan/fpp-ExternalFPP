@@ -62,7 +62,7 @@ if (file_exists($settingsFile)) {
 
 <div style="margin:0 auto;">
     <fieldset class="border p-3">
-        <legend>External Web Access</legend>
+        <legend>External FPP Config</legend>
         <div class="p-3">
             <p>
                 This plugin opens an additional TCP port that serves the FPP web UI behind a

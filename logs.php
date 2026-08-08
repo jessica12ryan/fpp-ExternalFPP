@@ -18,7 +18,7 @@ $logFile = $logDir . '/plugin-fpp-ExternalFPP.log';
 
 <div style="margin:0 auto;">
     <fieldset class="border p-3">
-        <legend>Plugin Log</legend>
+        <legend>External FPP Log</legend>
         <div class="p-3">
             <p>
                 <b>Log file:</b> <code><?php echo htmlspecialchars($logFile); ?></code>
