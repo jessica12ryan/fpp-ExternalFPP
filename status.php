@@ -153,12 +153,7 @@ var efppStatus = {
                         [advIcon + 'Forwarded HTTPS port', s.enable_https ? s.forwarded_https_port : '<span class="text-secondary">-</span>']
                     );
                 }
-                rows.push(
-                    ['Users', s.user_count > 0
-                        ? s.users.map(escHtml).join(', ')
-                        : '<span class="text-danger">None (' + (s.enabled ? 'plugin cannot stay enabled' : 'add a user to enable') + ')</span>'],
-                    ['Users count', s.user_count]
-                );
+                rows.push(['Users', s.user_count]);
                 // Apache/htpasswd internals are an Advanced-level setting.
                 if (efppStatus.uiLevel >= 1) {
                     rows.push(
