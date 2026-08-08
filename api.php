@@ -565,6 +565,13 @@ function efppValidateData($data, $existing) {
     $clean['enable_http'] = !empty($data['enable_http']) ? 1 : 0;
     $clean['enable_https'] = !empty($data['enable_https']) ? 1 : 0;
 
+    // External access can only be turned on when at least one account exists
+    // (with no users the password file is removed and the login page would be
+    // unreachable for everyone).
+    if (($clean['enable_http'] || $clean['enable_https']) && empty(efppUsersFromSettings($existing))) {
+        $errors[] = 'Add at least one user in the Users tab before enabling HTTP or HTTPS access.';
+    }
+
     $clean['use_public_ports'] = !empty($data['use_public_ports']) ? 1 : 0;
 
     // Router-forwarded public ports are optional. A blank/omitted value falls

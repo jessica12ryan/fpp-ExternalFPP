@@ -22,6 +22,7 @@ $enableHttps = 1;
 $usePublicPorts = 0;
 $httpPublicPort = '';
 $httpsPublicPort = '';
+$userCount = 0;
 if (file_exists($settingsFile)) {
     $s = json_decode(file_get_contents($settingsFile), true);
     if (is_array($s)) {
@@ -35,6 +36,11 @@ if (file_exists($settingsFile)) {
         $httpPublicPort = isset($s['http_public_port']) ? (string)$s['http_public_port'] : '';
         $httpsPublicPort = isset($s['https_public_port']) ? (string)$s['https_public_port'] : '';
         $enabled = ($enableHttp || $enableHttps) ? 1 : 0;
+        foreach (($s['users'] ?? array()) as $u) {
+            if (is_array($u) && isset($u['username']) && trim((string)$u['username']) !== '') {
+                $userCount++;
+            }
+        }
     }
 }
 ?>
@@ -72,11 +78,18 @@ if (file_exists($settingsFile)) {
                         <?php endif; ?>
                     </td>
                 </tr>
+                <tr id="efpp_no_users_row" <?php echo $userCount === 0 ? '' : 'style="display:none;"'; ?>>
+                    <td></td>
+                    <td style="padding: 4px;">
+                        <span class="text-warning">Add at least one user in the <b>Users</b> tab before you can enable HTTP or HTTPS access.</span>
+                    </td>
+                </tr>
                 <tr>
                     <td style="padding: 4px;"><b>Enable HTTP port:</b></td>
                     <td style="padding: 4px;">
                         <input type="checkbox" id="efpp_enable_http"
                                onchange="efpp.togglePort();"
+                               <?php echo $userCount === 0 ? 'disabled' : ''; ?>
                                <?php echo $enableHttp ? 'checked' : ''; ?>>
                         <?php echo efppHelp('When checked, the HTTP port below is served over plain HTTP.'); ?>
                     </td>
@@ -95,6 +108,7 @@ if (file_exists($settingsFile)) {
                     <td style="padding: 4px;">
                         <input type="checkbox" id="efpp_enable_https"
                                onchange="efpp.togglePort();"
+                               <?php echo $userCount === 0 ? 'disabled' : ''; ?>
                                <?php echo $enableHttps ? 'checked' : ''; ?>>
                         <?php echo efppHelp('When checked, the HTTPS port below is served over TLS using FPP\'s built-in self-signed certificate.'); ?>
                     </td>
@@ -231,6 +245,12 @@ var efpp = {
 
     renderStatus: function(s) {
         efpp.enabled = !!s.enabled;
+        // HTTP/HTTPS access can only be switched on when at least one user
+        // exists (the login page would otherwise be unreachable for everyone).
+        var noUsers = !s.user_count;
+        $('#efpp_enable_http').prop('disabled', noUsers);
+        $('#efpp_enable_https').prop('disabled', noUsers);
+        $('#efpp_no_users_row').css('display', noUsers ? '' : 'none');
         // Keep the checkboxes in sync with what actually got applied (a failed
         // save reverts them so the UI never shows an un-applied state).
         $('#efpp_enable_http').prop('checked', !!s.enable_http);
