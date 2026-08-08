@@ -51,6 +51,13 @@ define('FPP_LOG_DIR', getenv('LOGDIR') ?: '/home/fpp/media/logs');
 define('FPP_LOG_FILE', FPP_LOG_DIR . '/plugin-fpp-ExternalFPP.log');
 define('BACKEND_DEFAULT_PORT', 80);
 define('HTTPS_DEFAULT_PORT', 8443);
+// The box's own shellinaboxd (FPP Help > SSH Shell). FPP's UI links to it as
+// /proxy/<ip>:<port> (using SERVER_ADDR, which is 127.0.0.1 when reached
+// through the plugin's local reverse proxy). The plugin exposes that path
+// itself so the shell keeps working even when no matching entry exists in
+// FPP's own proxy list (proxies.php).
+define('SHELL_PROXY_PATH', '/proxy/127.0.0.1:4200');
+define('SHELL_PROXY_TARGET', 'http://127.0.0.1:4200/');
 define('SSL_CERT_FILE', '/etc/ssl/certs/ssl-cert-snakeoil.pem');
 define('SSL_KEY_FILE', '/etc/ssl/private/ssl-cert-snakeoil.key');
 
@@ -432,6 +439,17 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '    # Replaced server-side, never trusted from the client.';
     $lines[] = '    RequestHeader unset X-Forwarded-For';
     $lines[] = '    RequestHeader set X-Forwarded-For "%{REMOTE_ADDR}s"';
+    $lines[] = '    # Tell the backend who the visitor connected to and over which scheme,';
+    $lines[] = '    # the way FPP\'s own reverse-proxying (a "proxy subnet" setup) expects,';
+    $lines[] = '    # so links FPP generates for external users stay on the right host';
+    $lines[] = '    # and scheme (e.g. the Help > SSH Shell link). Disable mod_proxy\'s';
+    $lines[] = '    # automatic forwarding headers so only these explicit, unspoofable';
+    $lines[] = '    # values (reset from the real request) are sent upstream.';
+    $lines[] = '    ProxyAddHeaders Off';
+    $lines[] = '    RequestHeader unset X-Forwarded-Host';
+    $lines[] = '    RequestHeader set X-Forwarded-Host "expr=%{req:host}"';
+    $lines[] = '    RequestHeader unset X-Forwarded-Proto';
+    $lines[] = '    RequestHeader set X-Forwarded-Proto "' . ($https ? 'https' : 'http') . '"';
     $lines[] = '';
     $lines[] = '    # Serve the login page directly from the plugin instead of proxying it.';
     $lines[] = '    # The "!" marks the URL as not-proxied so the Alias below can serve it.';
@@ -470,6 +488,9 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '        SetHandler form-logout-handler';
     $lines[] = '        AuthFormLogoutLocation ' . LOGIN_PAGE_URL;
     $lines[] = '    </Location>';
+    $lines[] = '';
+    $lines[] = '    ProxyPass ' . SHELL_PROXY_PATH . ' ' . SHELL_PROXY_TARGET;
+    $lines[] = '    ProxyPassReverse ' . SHELL_PROXY_PATH . ' ' . SHELL_PROXY_TARGET;
     $lines[] = '';
     $lines[] = '    ProxyPass / http://127.0.0.1:' . $backendPort . '/';
     $lines[] = '    ProxyPassReverse / http://127.0.0.1:' . $backendPort . '/';
