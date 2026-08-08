@@ -6,13 +6,14 @@
 
 ## What it does
 
-FPP's normal web UI (port `80`) is left exactly as it is. This plugin opens an **additional web address** that shows the *same* FPP interface, but only after a **login page**.
+FPP's normal web UI (port `80`) is left exactly as it is. This plugin opens an **additional web address** via HTTP or HTTPS that shows the *same* FPP interface, but only after a **login page**.
 
 Use it when you want to:
 
-- share access to your lights without handing out the main FPP address,
+- share access to your FPP UI without exposing the main FPP address,
 - add an extra layer of credentials in front of the dashboard,
 - let guests or remote users in without exposing the regular UI.
+- block users from editing settings, network config, and other vital pages.
 
 No extra software is needed — it uses the web server that is already built into FPP.
 
@@ -21,7 +22,6 @@ No extra software is needed — it uses the web server that is already built int
 ## Before you start
 
 - FPP 8 or newer
-- FPP's web UI working on its normal port (default `80`)
 
 ---
 
@@ -30,7 +30,7 @@ No extra software is needed — it uses the web server that is already built int
 ### Recommended: Plugin Manager
 
 1. In FPP's UI, go to **Content Setup → Plugin Manager**.
-2. Paste this address and click **Get Plugin Info**:
+2. Paste this address:
 
    ```
    https://raw.githubusercontent.com/jessica12ryan/fpp-ExternalFPP/main/pluginInfo.json
@@ -91,13 +91,7 @@ The **Pages** tab tells you which bits are required for the page to work and war
 
 ## Signing out
 
-Visit:
-
-```
-http://<your-fpp-ip>:8080/logout
-```
-
-This removes your login and returns you to the login page.
+Click Status/Control > Logout
 
 ---
 
