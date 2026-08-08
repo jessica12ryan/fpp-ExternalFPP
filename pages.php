@@ -31,11 +31,13 @@ function efppPageContent($pluginDir, $file, $template) {
 
 $loginPageContent = efppPageContent($pluginDir, '/www/login.html', '/templates/login.html');
 $changePwContent = efppPageContent($pluginDir, '/www/change-password.html', '/templates/change-password.html');
+$deniedPageContent = efppPageContent($pluginDir, '/www/access-denied.html', '/templates/access-denied.html');
 
 // The bundled originals, embedded into the page so the editor can flag when the
 // live page differs from them.
 $loginTpl = (string)@file_get_contents($pluginDir . '/templates/login.html');
 $changeTpl = (string)@file_get_contents($pluginDir . '/templates/change-password.html');
+$deniedTpl = (string)@file_get_contents($pluginDir . '/templates/access-denied.html');
 ?>
 
 <?php include __DIR__ . '/tabs.inc'; ?>
@@ -63,6 +65,7 @@ $changeTpl = (string)@file_get_contents($pluginDir . '/templates/change-password
     <div class="efpp-subtabs">
         <input type="button" class="buttons efpp-tab active" value="Login Page" data-page="login" onclick="efppPages.switchTo('login');">
         <input type="button" class="buttons efpp-tab" value="Change Password Page" data-page="change" onclick="efppPages.switchTo('change');">
+        <input type="button" class="buttons efpp-tab" value="Access Denied Page" data-page="denied" onclick="efppPages.switchTo('denied');">
     </div>
 
     <div id="efpp_page_login" class="efpp-page active">
@@ -201,6 +204,44 @@ document.getElementById("save").addEventListener("click", function () {
                         is never touched.</li>
                     <li>If your page does not call the API, or the API rejects the password, the visitor
                         stays on this page and keeps being blocked from the FPP UI.</li>
+                    </ul>
+            </div>
+        </fieldset>
+    </div>
+
+    <div id="efpp_page_denied" class="efpp-page">
+        <fieldset class="border p-3">
+            <legend>Access Denied Page <span id="efpp_badge_denied" class="efpp-custom-badge"></span></legend>
+            <div class="p-3">
+                <p>
+                    This is the page a visitor sees when they are signed in but their account is
+                    <b>not an Admin</b> and they try to open an admin-only page such as
+                    <b>settings.php</b> or <b>networkconfig.php</b>. Customize it so blocked users
+                    can easily get back to the FPP UI.
+                </p>
+                <p>
+                    <b>Preview:</b> <span id="efpp_preview_denied">loading...</span>
+                </p>
+                <textarea id="efpp_denied_page" rows="24" style="width:100%;font-family:monospace;font-size:12px;"
+                          spellcheck="false"><?php echo htmlspecialchars($deniedPageContent, ENT_QUOTES); ?></textarea>
+                <div style="margin-top:6px;">
+                    <input type="button" class="buttons" value="Save Access Denied Page" onclick="efppPages.save('denied');">
+                    <input type="button" class="buttons" value="Reset to Default" onclick="efppPages.reset('denied');">
+                </div>
+                <div id="efpp_result_denied" style="margin-top:6px;"></div>
+            </div>
+        </fieldset>
+
+        <fieldset class="border p-3">
+            <legend>Required Code &mdash; Access Denied Page</legend>
+            <div class="p-3">
+                <p>For the page to be useful it should give the visitor a way out:</p>
+                <ul>
+                    <li>A <b>Home</b> button linking to <code>&lt;a href="/"&gt;</code> so they can
+                        return to the FPP web UI.</li>
+                    <li>A <b>Go Back</b> button using <code>history.back()</code> so they can return to
+                        the previous page they were on.</li>
+                    <li>Everything else (styling, messaging, branding) is completely optional.</li>
                 </ul>
             </div>
         </fieldset>
@@ -216,16 +257,32 @@ document.getElementById("save").addEventListener("click", function () {
 // the HTML parser would end the script element there and swallow the rest.
 var EFPP_TPL = {
     login: <?php echo json_encode($loginTpl, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES); ?>,
-    change: <?php echo json_encode($changeTpl, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES); ?>
+    change: <?php echo json_encode($changeTpl, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES); ?>,
+    denied: <?php echo json_encode($deniedTpl, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES); ?>
 };
 
+// Per-page editor ids and API endpoints.
+function efppPageFields(page) {
+    return {
+        ta: '#efpp_' + page + '_page',
+        badge: '#efpp_badge_' + page
+    };
+}
+function efppPageEndpoints(page) {
+    var ep = page === 'login' ? 'login-page' : page === 'change' ? 'change-password-page' : 'access-denied-page';
+    return {
+        save: 'save-' + ep,
+        reset: 'reset-' + ep,
+        get: ep
+    };
+}
+
 function efppCustomBadge(page) {
-    var ta = page === 'login' ? '#efpp_login_page' : '#efpp_change_pw_page';
-    var badge = page === 'login' ? '#efpp_badge_login' : '#efpp_badge_change';
-    var current = String($(ta).val()).replace(/\r\n/g, "\n").trim();
+    var f = efppPageFields(page);
+    var current = String($(f.ta).val()).replace(/\r\n/g, "\n").trim();
     var original = String(EFPP_TPL[page]).replace(/\r\n/g, "\n").trim();
     var custom = current !== original;
-    $(badge)
+    $(f.badge)
         .text(custom ? 'Customized' : 'Default')
         .attr('class', 'efpp-custom-badge ' + (custom ? 'efpp-custom' : 'efpp-default'));
 }
@@ -258,14 +315,14 @@ var efppPages = {
     },
 
     save: function(page) {
-        var ta = page === 'login' ? '#efpp_login_page' : '#efpp_change_pw_page';
-        var ep = page === 'login' ? 'save-login-page' : 'save-change-password-page';
+        var f = efppPageFields(page);
+        var ep = efppPageEndpoints(page).save;
         $('#efpp_result_' + page).html('<span class="text-warning">Saving...</span>');
         $.ajax({
             url: efppPages.apiBase + '/' + ep,
             type: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify({ content: $(ta).val() }),
+            data: JSON.stringify({ content: $(f.ta).val() }),
             dataType: 'json',
             success: function(data) {
                 efppPages.renderResult(page, data);
@@ -278,15 +335,15 @@ var efppPages = {
     },
 
     reset: function(page) {
-        var label = page === 'login' ? 'login page' : 'change password page';
+        var label = page === 'login' ? 'login page' : page === 'change' ? 'change password page' : 'access denied page';
         if (!confirm('Replace the current ' + label + ' with the default template? Your customizations will be lost.')) {
             return;
         }
-        var ep = page === 'login' ? 'reset-login-page' : 'reset-change-password-page';
-        var ta = page === 'login' ? '#efpp_login_page' : '#efpp_change_pw_page';
+        var ep = efppPageEndpoints(page);
+        var f = efppPageFields(page);
         $('#efpp_result_' + page).html('<span class="text-warning">Resetting...</span>');
         $.ajax({
-            url: efppPages.apiBase + '/' + ep,
+            url: efppPages.apiBase + '/' + ep.reset,
             type: 'POST',
             contentType: 'application/json',
             data: '{}',
@@ -295,11 +352,11 @@ var efppPages = {
                 efppPages.renderResult(page, data);
                 if (data.success) {
                     $.ajax({
-                        url: efppPages.apiBase + '/' + (page === 'login' ? 'login-page' : 'change-password-page'),
+                        url: efppPages.apiBase + '/' + ep.get,
                         type: 'GET',
                         dataType: 'json',
                         success: function(d) {
-                            if (d.success) { $(ta).val(d.content); }
+                            if (d.success) { $(f.ta).val(d.content); }
                             efppCustomBadge(page);
                         }
                     });
@@ -318,9 +375,11 @@ var efppPages = {
             var base = scheme + '://' + window.location.hostname + ':' + uport;
             $('#efpp_preview_login').html('<a href="' + base + '/login.html" target="_blank">' + base + '/login.html</a>');
             $('#efpp_preview_change').html('<a href="' + base + '/change-password.html" target="_blank">' + base + '/change-password.html</a>');
+            $('#efpp_preview_denied').html('<a href="' + base + '/access-denied.html" target="_blank">' + base + '/access-denied.html</a>');
         } else {
             $('#efpp_preview_login').html('<span class="text-secondary">External access is disabled (check "Enable HTTP port" or "Enable HTTPS port" in the Config tab)</span>');
             $('#efpp_preview_change').html('<span class="text-secondary">External access is disabled (check "Enable HTTP port" or "Enable HTTPS port" in the Config tab)</span>');
+            $('#efpp_preview_denied').html('<span class="text-secondary">External access is disabled (check "Enable HTTP port" or "Enable HTTPS port" in the Config tab)</span>');
         }
     }
 };
@@ -333,8 +392,10 @@ function escHtml(s) {
 $(document).ready(function() {
     efppCustomBadge('login');
     efppCustomBadge('change');
+    efppCustomBadge('denied');
     $('#efpp_login_page').on('input', function() { efppCustomBadge('login'); });
     $('#efpp_change_pw_page').on('input', function() { efppCustomBadge('change'); });
+    $('#efpp_denied_page').on('input', function() { efppCustomBadge('denied'); });
 
     $.ajax({
         url: efppPages.apiBase + '/status',

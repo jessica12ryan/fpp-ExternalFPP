@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Access Denied</title>
+<style>
+  :root {
+    --bg: #1c1e21;
+    --panel: #26292e;
+    --border: #3a3f46;
+    --text: #e8eaed;
+    --muted: #9aa0a6;
+    --accent: #f2a21c;
+    --accent-hover: #ffb73a;
+    --danger: #ea4335;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .denied-card {
+    width: 100%;
+    max-width: 440px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 32px 28px 28px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    text-align: center;
+  }
+  .denied-card .icon {
+    font-size: 44px;
+    line-height: 1;
+    margin-bottom: 12px;
+    color: var(--danger);
+  }
+  .denied-card h1 {
+    margin: 0 0 10px;
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .denied-card p {
+    margin: 0 0 22px;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .denied-card .actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  .denied-card a,
+  .denied-card button {
+    display: inline-block;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+  }
+  .denied-card .home {
+    background: var(--accent);
+    color: #1c1e21;
+  }
+  .denied-card .home:hover {
+    background: var(--accent-hover);
+  }
+  .denied-card .back {
+    background: #3a3f46;
+    color: var(--text);
+  }
+  .denied-card .back:hover {
+    background: #4a5058;
+  }
+</style>
+</head>
+<body>
+  <div class="denied-card">
+    <div class="icon">&#128272;</div>
+    <h1>Access Denied</h1>
+    <p>Your account does not have permission to open this page.</p>
+    <div class="actions">
+      <a class="home" href="/">Home</a>
+      <button class="back" type="button" onclick="history.back();">Go Back</button>
+    </div>
+  </div>
+</body>
+</html>

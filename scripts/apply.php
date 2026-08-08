@@ -34,6 +34,9 @@ define('LOGIN_PAGE_TEMPLATE', PLUGIN_DIR . '/templates/login.html');
 define('CHANGE_PW_FILE', LOGIN_PAGE_DIR . '/change-password.html');
 define('CHANGE_PW_TEMPLATE', PLUGIN_DIR . '/templates/change-password.html');
 define('CHANGE_PW_URL', '/change-password.html');
+define('ACCESS_DENIED_FILE', LOGIN_PAGE_DIR . '/access-denied.html');
+define('ACCESS_DENIED_TEMPLATE', PLUGIN_DIR . '/templates/access-denied.html');
+define('ACCESS_DENIED_URL', '/access-denied.html');
  // After a successful form login, mod_auth_form redirects here. It is a plugin
  // API endpoint that 302s the visitor to either the FPP UI or the change-password
  // page (when their account needs a forced change), so the change-password page
@@ -214,8 +217,41 @@ function efppEnsureChangePasswordPage() {
     return true;
 }
 
+function efppDefaultAccessDeniedPage() {
+    if (file_exists(ACCESS_DENIED_TEMPLATE)) {
+        $c = @file_get_contents(ACCESS_DENIED_TEMPLATE);
+        if (is_string($c) && $c !== '') {
+            return $c;
+        }
+    }
+    // Fallback if the bundled template is missing.
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Access Denied</title></head>'
+        . '<body style="font-family:sans-serif;background:#1c1e21;color:#eee;text-align:center;padding:60px;">'
+        . '<h1>Access Denied</h1>'
+        . '<p>Your account does not have permission to open this page.</p>'
+        . '<a href="/" style="display:inline-block;margin:8px;padding:10px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Home</a>'
+        . '<button onclick="history.back();" style="display:inline-block;margin:8px;padding:10px 18px;background:#374151;color:#fff;border:none;border-radius:6px;">Go Back</button>'
+        . '</body></html>';
+}
+
+function efppEnsureAccessDeniedPage() {
+    efppEnsureConfigDir();
+    if (!is_dir(LOGIN_PAGE_DIR)) {
+        @mkdir(LOGIN_PAGE_DIR, 0775, true);
+    }
+    if (!file_exists(ACCESS_DENIED_FILE)) {
+        if (@file_put_contents(ACCESS_DENIED_FILE, efppDefaultAccessDeniedPage()) === false) {
+            efppLog('WARNING: could not create the access denied page at ' . ACCESS_DENIED_FILE);
+            return false;
+        }
+        efppRun('chown fpp:fpp ' . escapeshellarg(ACCESS_DENIED_FILE) . ' 2>/dev/null');
+        efppRun('chmod 644 ' . escapeshellarg(ACCESS_DENIED_FILE) . ' 2>/dev/null');
+    }
+    return true;
+}
+
 function efppEnsurePages() {
-    return efppEnsureLoginPage() && efppEnsureChangePasswordPage();
+    return efppEnsureLoginPage() && efppEnsureChangePasswordPage() && efppEnsureAccessDeniedPage();
 }
 
 /**
@@ -278,7 +314,7 @@ function efppWriteGroupFile($users) {
  * session, logout, and form auth). $https toggles the SSL directives and adds
  * the https ProxyPassReverse fallback. Returns an array of lines.
  */
-function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $changePwFile, $https, $groupsFile) {
+function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $changePwFile, $https, $groupsFile, $accessDeniedFile) {
     $backendPort = (int)$backendPort;
     $loginPageDir = dirname($loginPageFile);
     $lines = array();
@@ -319,16 +355,24 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '    # The "!" marks the URL as not-proxied so the Alias below can serve it.';
     $lines[] = '    ProxyPass ' . LOGIN_PAGE_URL . ' !';
     $lines[] = '    ProxyPass ' . CHANGE_PW_URL . ' !';
+    $lines[] = '    ProxyPass ' . ACCESS_DENIED_URL . ' !';
     $lines[] = '    # Keep the logout handler local too (ProxyPass would otherwise override';
     $lines[] = '    # its SetHandler and send /logout to the FPP backend).';
     $lines[] = '    ProxyPass /logout !';
     $lines[] = '    Alias ' . LOGIN_PAGE_URL . ' ' . $loginPageFile;
     $lines[] = '    Alias ' . CHANGE_PW_URL . ' ' . $changePwFile;
+    $lines[] = '    Alias ' . ACCESS_DENIED_URL . ' ' . $accessDeniedFile;
     $lines[] = '    <Directory ' . $loginPageDir . '>';
     $lines[] = '        Require all granted';
     $lines[] = '    </Directory>';
-    $lines[] = '    # The login page must be reachable without a session or logging in loops';
+    $lines[] = '    # The login page and the access-denied page must be reachable without a';
+    $lines[] = '    # session or logging in loops (the access-denied page is the ErrorDocument';
+    $lines[] = '    # target for accounts that ARE logged in but lack Admin rights).';
     $lines[] = '    <Location ' . LOGIN_PAGE_URL . '>';
+    $lines[] = '        AuthType None';
+    $lines[] = '        Require all granted';
+    $lines[] = '    </Location>';
+    $lines[] = '    <Location ' . ACCESS_DENIED_URL . '>';
     $lines[] = '        AuthType None';
     $lines[] = '        Require all granted';
     $lines[] = '    </Location>';
@@ -353,11 +397,13 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '        Require all granted';
     $lines[] = '    </Proxy>';
     $lines[] = '';
-    $lines[] = '    # Everything except the login page and settings.php is protected by a form';
-    $lines[] = '    # login. Requests without a valid session are redirected to the login';
-    $lines[] = '    # page; the login form POSTs back here and on success Apache sets the';
-    $lines[] = '    # session cookie. settings.php gets its own admin-only rule below.';
-    $lines[] = '    <LocationMatch "^/(?!(login\\.html|settings\\.php))">';
+    $lines[] = '    # Everything except the local pages (login, change password, access';
+    $lines[] = '    # denied, settings, network config) is protected by a form login.';
+    $lines[] = '    # Requests without a valid session are redirected to the login page;';
+    $lines[] = '    # the login form POSTs back here and on success Apache sets the';
+    $lines[] = '    # session cookie. settings.php and networkconfig.php get their own';
+    $lines[] = '    # admin-only rule below.';
+    $lines[] = '    <LocationMatch "^/(?!(login\\.html|change-password\\.html|access-denied\\.html|settings\\.php|networkconfig\\.php))">';
     $lines[] = '        AuthType Form';
     $lines[] = '        AuthName "' . REALM . '"';
     $lines[] = '        AuthFormProvider file';
@@ -368,12 +414,13 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '        Require valid-user';
     $lines[] = '    </LocationMatch>';
     $lines[] = '';
-    $lines[] = '    # settings.php is admin-only. This more specific section combines with the';
-    $lines[] = '    # form auth above (both conditions must pass): visitors without a session';
-    $lines[] = '    # are still sent to the login page, while logged-in non-Admin accounts';
-    $lines[] = '    # get a 403. Membership is read from the group file on every request, so';
-    $lines[] = '    # role changes apply immediately without reloading Apache.';
-    $lines[] = '    <LocationMatch "^/settings\\.php$">';
+    $lines[] = '    # settings.php and networkconfig.php are admin-only. This more specific';
+    $lines[] = '    # section combines with the form auth above (both conditions must pass):';
+    $lines[] = '    # visitors without a session are still sent to the login page, while';
+    $lines[] = '    # logged-in non-Admin accounts are shown the access-denied page via the';
+    $lines[] = '    # ErrorDocument below. Membership is read from the group file on every';
+    $lines[] = '    # request, so role changes apply immediately without reloading Apache.';
+    $lines[] = '    <LocationMatch "^/(settings\\.php|networkconfig\\.php)$">';
     $lines[] = '        AuthType Form';
     $lines[] = '        AuthName "' . REALM . '"';
     $lines[] = '        AuthFormProvider file';
@@ -386,11 +433,13 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '            Require valid-user';
     $lines[] = '            Require group ' . ADMIN_GROUP_NAME;
     $lines[] = '        </RequireAll>';
+    $lines[] = '        ErrorDocument 401 ' . ACCESS_DENIED_URL;
+    $lines[] = '        ErrorDocument 403 ' . ACCESS_DENIED_URL;
     $lines[] = '    </LocationMatch>';
     return $lines;
 }
 
-function efppBuildApacheConf($port, $httpsPort, $backendPort, $htpasswdFile, $loginPageFile, $changePwFile, $enableHttp, $enableHttps) {
+function efppBuildApacheConf($port, $httpsPort, $backendPort, $htpasswdFile, $loginPageFile, $changePwFile, $accessDeniedFile, $enableHttp, $enableHttps) {
     $port = (int)$port;
     $httpsPort = (int)$httpsPort;
     $backendPort = (int)$backendPort;
@@ -416,7 +465,7 @@ function efppBuildApacheConf($port, $httpsPort, $backendPort, $htpasswdFile, $lo
         $lines[] = '    ErrorLog /home/fpp/media/logs/apache2-externalfpp-error.log';
         $lines[] = '    CustomLog /home/fpp/media/logs/apache2-externalfpp-access.log combined';
         $lines[] = '';
-        $lines = array_merge($lines, efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $changePwFile, false, GROUPS_FILE));
+        $lines = array_merge($lines, efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $changePwFile, false, GROUPS_FILE, ACCESS_DENIED_FILE));
         $lines[] = '</VirtualHost>';
         $lines[] = '';
     }
@@ -431,7 +480,7 @@ function efppBuildApacheConf($port, $httpsPort, $backendPort, $htpasswdFile, $lo
         $lines[] = '    ErrorLog /home/fpp/media/logs/apache2-externalfpp-error.log';
         $lines[] = '    CustomLog /home/fpp/media/logs/apache2-externalfpp-access.log combined';
         $lines[] = '';
-        $lines = array_merge($lines, efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $changePwFile, true, GROUPS_FILE));
+        $lines = array_merge($lines, efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $changePwFile, true, GROUPS_FILE, ACCESS_DENIED_FILE));
         $lines[] = '</VirtualHost>';
         $lines[] = '';
     }
@@ -584,7 +633,7 @@ function efppApply() {
     }
 
     if ($enabled) {
-        $conf = efppBuildApacheConf($port, $httpsPort, $backendPort, HTPASSWD_FILE, LOGIN_PAGE_FILE, CHANGE_PW_FILE, $enableHttp, $enableHttps);
+        $conf = efppBuildApacheConf($port, $httpsPort, $backendPort, HTPASSWD_FILE, LOGIN_PAGE_FILE, CHANGE_PW_FILE, ACCESS_DENIED_FILE, $enableHttp, $enableHttps);
         $tmp = APACHE_CONF_FILE . '.tmp';
         if (@file_put_contents($tmp, $conf) === false) {
             $msg = 'Could not write Apache config to ' . APACHE_CONF_FILE;

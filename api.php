@@ -25,6 +25,9 @@ define('EFPP_LOGIN_PAGE_URL', '/login.html');
 define('EFPP_CHANGE_PW_FILE', EFPP_LOGIN_PAGE_DIR . '/change-password.html');
 define('EFPP_CHANGE_PW_TEMPLATE', EFPP_PLUGIN_DIR . '/templates/change-password.html');
 define('EFPP_CHANGE_PW_URL', '/change-password.html');
+define('EFPP_ACCESS_DENIED_FILE', EFPP_LOGIN_PAGE_DIR . '/access-denied.html');
+define('EFPP_ACCESS_DENIED_TEMPLATE', EFPP_PLUGIN_DIR . '/templates/access-denied.html');
+define('EFPP_ACCESS_DENIED_URL', '/access-denied.html');
 define('EFPP_APACHE_CONF_NAME', 'fpp-externalfpp');
 define('EFPP_APACHE_CONF_ENABLED', '/etc/apache2/conf-enabled/fpp-externalfpp.conf');
 define('EFPP_LOG_DIR', getenv('LOGDIR') ?: '/home/fpp/media/logs');
@@ -471,6 +474,65 @@ function efppResetChangePasswordPageEndpoint() {
         return efppAdminOnlyError();
     }
     return efppResetPage(EFPP_CHANGE_PW_FILE, 'efppDefaultChangePasswordPage', 'change password page');
+}
+
+function efppDefaultAccessDeniedPage() {
+    if (file_exists(EFPP_ACCESS_DENIED_TEMPLATE)) {
+        $c = @file_get_contents(EFPP_ACCESS_DENIED_TEMPLATE);
+        if (is_string($c) && $c !== '') {
+            return $c;
+        }
+    }
+    // Fallback if the bundled template is missing.
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Access Denied</title></head>'
+        . '<body style="font-family:sans-serif;background:#1c1e21;color:#eee;text-align:center;padding:60px;">'
+        . '<h1>Access Denied</h1>'
+        . '<p>Your account does not have permission to open this page.</p>'
+        . '<a href="/" style="display:inline-block;margin:8px;padding:10px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Home</a>'
+        . '<button onclick="history.back();" style="display:inline-block;margin:8px;padding:10px 18px;background:#374151;color:#fff;border:none;border-radius:6px;">Go Back</button>'
+        . '</body></html>';
+}
+
+function efppAccessDeniedPageContent() {
+    if (file_exists(EFPP_ACCESS_DENIED_FILE)) {
+        $c = @file_get_contents(EFPP_ACCESS_DENIED_FILE);
+        if (is_string($c)) {
+            return $c;
+        }
+    }
+    return efppDefaultAccessDeniedPage();
+}
+
+function efppValidateAccessDeniedPage($content) {
+    if ($content === '') {
+        return array(array('The access denied page cannot be empty.'), array());
+    }
+    $warnings = array();
+    if (!preg_match('/href\s*=\s*["\']?\/["\']?/i', $content)) {
+        $warnings[] = 'The page should link to "/" as the Home button so blocked users can return to the FPP UI.';
+    }
+    if (!preg_match('/history\.back\(\)/i', $content)) {
+        $warnings[] = 'The page should include a Go Back button using history.back().';
+    }
+    return array(array(), $warnings);
+}
+
+function efppGetAccessDeniedPageEndpoint() {
+    return json(array('success' => true, 'content' => efppAccessDeniedPageContent()));
+}
+
+function efppSaveAccessDeniedPageEndpoint() {
+    if (efppSessionIsLimited()) {
+        return efppAdminOnlyError();
+    }
+    return efppSavePage(EFPP_ACCESS_DENIED_FILE, 'efppValidateAccessDeniedPage', 'access denied page');
+}
+
+function efppResetAccessDeniedPageEndpoint() {
+    if (efppSessionIsLimited()) {
+        return efppAdminOnlyError();
+    }
+    return efppResetPage(EFPP_ACCESS_DENIED_FILE, 'efppDefaultAccessDeniedPage', 'access denied page');
 }
 
 function efppSavePage($file, $validatorFn, $label) {
@@ -1388,6 +1450,9 @@ function getEndpointsfppExternalFPP() {
     $result[] = array('method' => 'GET', 'endpoint' => 'change-password-page', 'callback' => 'efppGetChangePasswordPageEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'save-change-password-page', 'callback' => 'efppSaveChangePasswordPageEndpoint');
     $result[] = array('method' => 'POST', 'endpoint' => 'reset-change-password-page', 'callback' => 'efppResetChangePasswordPageEndpoint');
+    $result[] = array('method' => 'GET', 'endpoint' => 'access-denied-page', 'callback' => 'efppGetAccessDeniedPageEndpoint');
+    $result[] = array('method' => 'POST', 'endpoint' => 'save-access-denied-page', 'callback' => 'efppSaveAccessDeniedPageEndpoint');
+    $result[] = array('method' => 'POST', 'endpoint' => 'reset-access-denied-page', 'callback' => 'efppResetAccessDeniedPageEndpoint');
 
     return $result;
 }
