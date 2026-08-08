@@ -153,19 +153,22 @@ var efppStatus = {
                         [advIcon + 'Forwarded HTTPS port', s.enable_https ? s.forwarded_https_port : '<span class="text-secondary">-</span>']
                     );
                 }
-                rows.push(['Users', s.user_count]);
-                // Apache/htpasswd internals are an Advanced-level setting.
-                if (efppStatus.uiLevel >= 1) {
-                    rows.push(
-                        [advIcon + 'Apache vhost enabled', s.apache_conf_enabled ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
-                        [advIcon + 'Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>']
-                    );
+                // The rows below only make sense once the plugin is enabled.
+                if (s.enabled) {
+                    rows.push(['Users', s.user_count]);
+                    // Apache/htpasswd internals are an Advanced-level setting.
+                    if (efppStatus.uiLevel >= 1) {
+                        rows.push(
+                            [advIcon + 'Apache vhost enabled', s.apache_conf_enabled ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>'],
+                            [advIcon + 'Password file present', s.htpasswd_exists ? '<span class="text-success">Yes</span>' : '<span class="text-danger">No</span>']
+                        );
+                    }
+                    rows.push(['Internal URL', urls.length ? urls.join('<br>') : '<span class="text-secondary">-</span>']);
+                    var extUrls = [];
+                    if (s.external_http_url) extUrls.push('<a href="' + escAttr(s.external_http_url) + '" target="_blank">' + escHtml(s.external_http_url) + '</a>');
+                    if (s.external_https_url) extUrls.push('<a href="' + escAttr(s.external_https_url) + '" target="_blank">' + escHtml(s.external_https_url) + '</a>');
+                    rows.push(['External URL', extUrls.length ? extUrls.join('<br>') : '<span class="text-secondary">-</span>']);
                 }
-                rows.push(['Internal URL', s.enabled && urls.length ? urls.join('<br>') : '<span class="text-secondary">-</span>']);
-                var extUrls = [];
-                if (s.external_http_url) extUrls.push('<a href="' + escAttr(s.external_http_url) + '" target="_blank">' + escHtml(s.external_http_url) + '</a>');
-                if (s.external_https_url) extUrls.push('<a href="' + escAttr(s.external_https_url) + '" target="_blank">' + escHtml(s.external_https_url) + '</a>');
-                rows.push(['External URL', extUrls.length ? extUrls.join('<br>') : '<span class="text-secondary">-</span>']);
                 var html = '<table class="fppTable" style="width:auto;">';
                 for (var i = 0; i < rows.length; i++) {
                     html += '<tr><td style="padding:4px;"><b>' + rows[i][0] + ':</b></td><td style="padding:4px;">' + rows[i][1] + '</td></tr>';
