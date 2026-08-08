@@ -175,7 +175,11 @@ var efppStatus = {
                 }
                 html += '</table>';
                 if (!s.enabled && s.configured) {
-                    html += '<p class="text-warning" style="margin-top:8px;">The HTTP/HTTPS ports are currently disabled. Go to the Config tab to enable it.</p>';
+                    if (s.user_count === 0) {
+                        html += '<p class="text-danger" style="margin-top:8px;">There are no Admin users. Go to the Users tab to add an Admin user.</p>';
+                    } else {
+                        html += '<p class="text-warning" style="margin-top:8px;">The HTTP/HTTPS ports are currently disabled. Go to the Config tab to enable it.</p>';
+                    }
                 }
                 $('#efpp_status_table').html(html);
             },
