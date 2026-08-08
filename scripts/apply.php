@@ -353,10 +353,11 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '        Require all granted';
     $lines[] = '    </Proxy>';
     $lines[] = '';
-    $lines[] = '    # Everything except the login page is protected by a form login. Requests';
-    $lines[] = '    # without a valid session are redirected to the login page; the login form';
-    $lines[] = '    # POSTs back here and on success Apache sets the session cookie.';
-    $lines[] = '    <LocationMatch "^/(?!login\\.html)">';
+    $lines[] = '    # Everything except the login page and settings.php is protected by a form';
+    $lines[] = '    # login. Requests without a valid session are redirected to the login';
+    $lines[] = '    # page; the login form POSTs back here and on success Apache sets the';
+    $lines[] = '    # session cookie. settings.php gets its own admin-only rule below.';
+    $lines[] = '    <LocationMatch "^/(?!(login\\.html|settings\\.php))">';
     $lines[] = '        AuthType Form';
     $lines[] = '        AuthName "' . REALM . '"';
     $lines[] = '        AuthFormProvider file';
