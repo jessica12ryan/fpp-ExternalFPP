@@ -190,11 +190,13 @@ var efppUsers = {
         html += '</table>';
         $('#efpp_users_table').html(html);
 
+        efppUsers.setDefaultRole();
+
         var warn = $('#efpp_users_warning');
         if (!efppUsers.enabled && efppUsers.users.length === 0) {
             warn.html('<div class="alert alert-danger" style="margin-top:8px;">' +
-                '<b>At least one user must be created before the plugin can be enabled.</b> ' +
-                'Add a user below, then enable the plugin from the Config tab.</div>');
+                '<b>At least one Admin user must be created before the plugin can be enabled.</b> ' +
+                'Add an Admin user below, then enable the plugin from the Config tab.</div>');
         } else if (efppUsers.enabled && efppUsers.users.length <= 1) {
             warn.html('<p class="text-warning" style="margin-top:8px;">' +
                 'The external port is enabled, so the last user cannot be deleted. ' +
@@ -212,6 +214,19 @@ var efppUsers = {
             success: efppUsers.render,
             error: function() {}
         });
+    },
+
+    // The Add User form defaults to the Admin role until at least one Admin
+    // exists (otherwise the plugin could never be enabled).
+    setDefaultRole: function() {
+        var hasAdmin = false;
+        for (var i = 0; i < efppUsers.users.length; i++) {
+            if ((efppUsers.users[i].role || 'admin') === 'admin') {
+                hasAdmin = true;
+                break;
+            }
+        }
+        $('#efpp_new_role').val(hasAdmin ? 'user' : 'admin');
     },
 
     add: function() {
@@ -240,7 +255,7 @@ var efppUsers = {
                     $('#efpp_new_password').val('');
                     $('#efpp_new_confirm').val('');
                     $('#efpp_new_must_change').prop('checked', false);
-                    $('#efpp_new_role').val('user');
+                    efppUsers.setDefaultRole();
                 }
             },
             error: function(xhr) {

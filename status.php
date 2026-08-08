@@ -154,8 +154,8 @@ var efppStatus = {
                     );
                 }
                 // The rows below only make sense once the plugin is enabled.
+                rows.push(['Users', s.user_count]);
                 if (s.enabled) {
-                    rows.push(['Users', s.user_count]);
                     // Apache/htpasswd internals are an Advanced-level setting.
                     if (efppStatus.uiLevel >= 1) {
                         rows.push(
@@ -176,9 +176,6 @@ var efppStatus = {
                 html += '</table>';
                 if (!s.enabled && s.configured) {
                     html += '<p class="text-warning" style="margin-top:8px;">The external port is currently disabled. Go to the Config tab to enable it.</p>';
-                }
-                if (!s.enabled && s.user_count === 0) {
-                    html += '<p class="text-danger" style="margin-top:8px;">No users are configured. Add at least one user in the Users tab before enabling the plugin.</p>';
                 }
                 $('#efpp_status_table').html(html);
             },
