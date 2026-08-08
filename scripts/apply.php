@@ -22,6 +22,8 @@
 define('PLUGIN_DIR', dirname(__DIR__));
 define('SETTINGS_FILE', PLUGIN_DIR . '/config/settings.json');
 define('HTPASSWD_FILE', PLUGIN_DIR . '/config/plugin.fpp-ExternalFPP.htpasswd');
+define('GROUPS_FILE', PLUGIN_DIR . '/config/plugin.fpp-ExternalFPP.groups');
+define('ADMIN_GROUP_NAME', 'efpp-admin');
 define('APACHE_CONF_FILE', '/etc/apache2/conf-available/fpp-externalfpp.conf');
 define('APACHE_CONF_NAME', 'fpp-externalfpp');
 define('REALM', 'FPP External Web Access');
@@ -221,8 +223,31 @@ function efppEnsurePages() {
  * directly (Apache accepts $2y$ natively), so no plaintext is ever written.
  * Returns array(true, message) on success, array(false, error) on failure.
  */
-function efppWriteHtpasswd($users) {
+function efppWriteGroupFile($users) {
     $users = efppUsersFromSettings(array('users' => $users));
+
+    // mod_authz_groupfile reads the group list per request, so Apache picks up
+    // role changes immediately without needing a reload or a conf regen.
+    $content = ADMIN_GROUP_NAME . ':';
+    foreach ($users as $u) {
+        if ($u['role'] === 'admin') {
+            $content .= ' ' . $u['username'];
+        }
+    }
+    $content .= "\n";
+
+    if (@file_put_contents(GROUPS_FILE, $content) === false) {
+        return false;
+    }
+    efppRun('chown fpp:fpp ' . escapeshellarg(GROUPS_FILE) . ' 2>/dev/null');
+    efppRun('chmod 644 ' . escapeshellarg(GROUPS_FILE) . ' 2>/dev/null');
+    return true;
+}
+
+    function efppWriteHtpasswd($users) {
+    $users = efppUsersFromSettings(array('users' => $users));
+
+    efppWriteGroupFile($users);
 
     // Normalize ownership so the web server (fpp user) can always read/overwrite it.
     efppRun('chown fpp:fpp ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
@@ -253,7 +278,7 @@ function efppWriteHtpasswd($users) {
  * session, logout, and form auth). $https toggles the SSL directives and adds
  * the https ProxyPassReverse fallback. Returns an array of lines.
  */
-function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $changePwFile, $https) {
+function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $changePwFile, $https, $groupsFile) {
     $backendPort = (int)$backendPort;
     $loginPageDir = dirname($loginPageFile);
     $lines = array();
@@ -341,6 +366,26 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '        AuthFormLogoutLocation ' . LOGIN_PAGE_URL;
     $lines[] = '        Require valid-user';
     $lines[] = '    </LocationMatch>';
+    $lines[] = '';
+    $lines[] = '    # settings.php is admin-only. This more specific section combines with the';
+    $lines[] = '    # form auth above (both conditions must pass): visitors without a session';
+    $lines[] = '    # are still sent to the login page, while logged-in non-Admin accounts';
+    $lines[] = '    # get a 403. Membership is read from the group file on every request, so';
+    $lines[] = '    # role changes apply immediately without reloading Apache.';
+    $lines[] = '    <LocationMatch "^/settings\\.php$">';
+    $lines[] = '        AuthType Form';
+    $lines[] = '        AuthName "' . REALM . '"';
+    $lines[] = '        AuthFormProvider file';
+    $lines[] = '        AuthUserFile ' . $htpasswdFile;
+    $lines[] = '        AuthGroupFile ' . $groupsFile;
+    $lines[] = '        AuthFormLoginRequiredLocation ' . LOGIN_PAGE_URL;
+    $lines[] = '        AuthFormLoginSuccessLocation ' . LOGIN_SUCCESS_URL;
+    $lines[] = '        AuthFormLogoutLocation ' . LOGIN_PAGE_URL;
+    $lines[] = '        <RequireAll>';
+    $lines[] = '            Require valid-user';
+    $lines[] = '            Require group ' . ADMIN_GROUP_NAME;
+    $lines[] = '        </RequireAll>';
+    $lines[] = '    </LocationMatch>';
     return $lines;
 }
 
@@ -370,7 +415,7 @@ function efppBuildApacheConf($port, $httpsPort, $backendPort, $htpasswdFile, $lo
         $lines[] = '    ErrorLog /home/fpp/media/logs/apache2-externalfpp-error.log';
         $lines[] = '    CustomLog /home/fpp/media/logs/apache2-externalfpp-access.log combined';
         $lines[] = '';
-        $lines = array_merge($lines, efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $changePwFile, false));
+        $lines = array_merge($lines, efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $changePwFile, false, GROUPS_FILE));
         $lines[] = '</VirtualHost>';
         $lines[] = '';
     }
@@ -385,7 +430,7 @@ function efppBuildApacheConf($port, $httpsPort, $backendPort, $htpasswdFile, $lo
         $lines[] = '    ErrorLog /home/fpp/media/logs/apache2-externalfpp-error.log';
         $lines[] = '    CustomLog /home/fpp/media/logs/apache2-externalfpp-access.log combined';
         $lines[] = '';
-        $lines = array_merge($lines, efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $changePwFile, true));
+        $lines = array_merge($lines, efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $changePwFile, true, GROUPS_FILE));
         $lines[] = '</VirtualHost>';
         $lines[] = '';
     }
@@ -414,7 +459,7 @@ function efppModuleEnabled($name) {
 function efppEnableModules() {
     // mod_auth_form needs mod_request to work, otherwise Apache fails to start
     // (AH02618) even though 'apachectl configtest' passes.
-    $required = array('proxy', 'proxy_http', 'headers', 'authn_file', 'auth_form', 'session', 'session_cookie', 'request', 'alias', 'ssl', 'rewrite');
+    $required = array('proxy', 'proxy_http', 'headers', 'authn_file', 'authz_groupfile', 'auth_form', 'session', 'session_cookie', 'request', 'alias', 'ssl', 'rewrite');
     $missing = array();
     $newlyEnabled = array();
     foreach ($required as $m) {

@@ -15,6 +15,8 @@
 define('EFPP_PLUGIN_DIR', __DIR__);
 define('EFPP_SETTINGS_FILE', EFPP_PLUGIN_DIR . '/config/settings.json');
 define('EFPP_HTPASSWD_FILE', EFPP_PLUGIN_DIR . '/config/plugin.fpp-ExternalFPP.htpasswd');
+define('EFPP_GROUPS_FILE', EFPP_PLUGIN_DIR . '/config/plugin.fpp-ExternalFPP.groups');
+define('EFPP_ADMIN_GROUP', 'efpp-admin');
 define('EFPP_APPLY_SCRIPT', EFPP_PLUGIN_DIR . '/scripts/apply.php');
 define('EFPP_LOGIN_PAGE_DIR', EFPP_PLUGIN_DIR . '/www');
 define('EFPP_LOGIN_PAGE_FILE', EFPP_LOGIN_PAGE_DIR . '/login.html');
@@ -117,12 +119,36 @@ function efppHashPassword($plain) {
 }
 
 /**
+ * Keeps the Apache group file in sync with the Admin role (read per request by
+ * mod_authz_groupfile, so role changes apply without reloading Apache). The
+ * file always exists so Apache never 500s on a missing group file.
+ */
+function efppWriteGroupsFile() {
+    $users = efppUsersFromSettings(efppLoadSettings());
+    $content = EFPP_ADMIN_GROUP . ':';
+    foreach ($users as $u) {
+        if ($u['role'] === 'admin') {
+            $content .= ' ' . $u['username'];
+        }
+    }
+    $content .= "\n";
+    if (@file_put_contents(EFPP_GROUPS_FILE, $content) === false) {
+        return false;
+    }
+    @chown(EFPP_GROUPS_FILE, 'fpp');
+    @chmod(EFPP_GROUPS_FILE, 0644);
+    return true;
+}
+
+/**
  * Writes every user to the Apache password file. Runs as the web (fpp) user,
  * which owns the plugin config directory, so no sudo is required here.
  * Uses the stored bcrypt hash directly, since Apache accepts $2y$ natively.
  */
 function efppWriteHtpasswd($users) {
     $users = efppUsersFromSettings(array('users' => $users));
+
+    efppWriteGroupsFile();
 
     if (empty($users)) {
         if (file_exists(EFPP_HTPASSWD_FILE)) {
@@ -1113,6 +1139,7 @@ function efppSetUserRoleEndpoint() {
     if (efppSaveSettingsFile(array_merge($s, array('users' => $users))) === false) {
         return json(array('success' => false, 'messages' => array(), 'errors' => array('Could not write the settings file. Check file permissions.')));
     }
+    efppWriteGroupsFile();
     efppLog('Role changed for user: ' . $username . ' -> ' . $role);
     return json(array('success' => true, 'messages' => array('Role updated for ' . $username . '.'), 'errors' => array()));
 }
