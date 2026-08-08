@@ -22,7 +22,7 @@ $enableHttps = 1;
 $usePublicPorts = 0;
 $httpPublicPort = '';
 $httpsPublicPort = '';
-$userCount = 0;
+$adminCount = 0;
 if (file_exists($settingsFile)) {
     $s = json_decode(file_get_contents($settingsFile), true);
     if (is_array($s)) {
@@ -38,7 +38,9 @@ if (file_exists($settingsFile)) {
         $enabled = ($enableHttp || $enableHttps) ? 1 : 0;
         foreach (($s['users'] ?? array()) as $u) {
             if (is_array($u) && isset($u['username']) && trim((string)$u['username']) !== '') {
-                $userCount++;
+                if (($u['role'] ?? 'admin') !== 'user') {
+                    $adminCount++;
+                }
             }
         }
     }
@@ -78,10 +80,10 @@ if (file_exists($settingsFile)) {
                         <?php endif; ?>
                     </td>
                 </tr>
-                <tr id="efpp_no_users_row" <?php echo $userCount === 0 ? '' : 'style="display:none;"'; ?>>
+                <tr id="efpp_no_users_row" <?php echo $adminCount === 0 ? '' : 'style="display:none;"'; ?>>
                     <td></td>
                     <td style="padding: 4px;">
-                        <span class="text-warning">Add at least one user in the <b>Users</b> tab before you can enable HTTP or HTTPS access.</span>
+                        <span class="text-warning">Add at least one <b>Admin</b> user in the <b>Users</b> tab before you can enable HTTP or HTTPS access.</span>
                     </td>
                 </tr>
                 <tr>
@@ -89,7 +91,7 @@ if (file_exists($settingsFile)) {
                     <td style="padding: 4px;">
                         <input type="checkbox" id="efpp_enable_http"
                                onchange="efpp.togglePort();"
-                               <?php echo $userCount === 0 ? 'disabled' : ''; ?>
+                               <?php echo $adminCount === 0 ? 'disabled' : ''; ?>
                                <?php echo $enableHttp ? 'checked' : ''; ?>>
                         <?php echo efppHelp('When checked, the HTTP port below is served over plain HTTP.'); ?>
                     </td>
@@ -108,7 +110,7 @@ if (file_exists($settingsFile)) {
                     <td style="padding: 4px;">
                         <input type="checkbox" id="efpp_enable_https"
                                onchange="efpp.togglePort();"
-                               <?php echo $userCount === 0 ? 'disabled' : ''; ?>
+                               <?php echo $adminCount === 0 ? 'disabled' : ''; ?>
                                <?php echo $enableHttps ? 'checked' : ''; ?>>
                         <?php echo efppHelp('When checked, the HTTPS port below is served over TLS using FPP\'s built-in self-signed certificate.'); ?>
                     </td>
@@ -247,7 +249,7 @@ var efpp = {
         efpp.enabled = !!s.enabled;
         // HTTP/HTTPS access can only be switched on when at least one user
         // exists (the login page would otherwise be unreachable for everyone).
-        var noUsers = !s.user_count;
+        var noUsers = !s.admin_count;
         $('#efpp_enable_http').prop('disabled', noUsers);
         $('#efpp_enable_https').prop('disabled', noUsers);
         $('#efpp_no_users_row').css('display', noUsers ? '' : 'none');

@@ -491,8 +491,12 @@ function efppStatusData() {
     $backendPort = (int)$s['backend_port'];
     $users = efppUsersFromSettings($s);
     $usernames = array();
+    $adminCount = 0;
     foreach ($users as $u) {
         $usernames[] = $u['username'];
+        if ($u['role'] === 'admin') {
+            $adminCount++;
+        }
     }
 
     // Public IP from the last public-access check (cached; we never do a live
@@ -528,6 +532,7 @@ function efppStatusData() {
         'external_https_url' => $externalHttpsUrl,
         'users' => $usernames,
         'user_count' => count($usernames),
+        'admin_count' => $adminCount,
         'apache_conf_enabled' => file_exists(EFPP_APACHE_CONF_ENABLED) ? 1 : 0,
         'htpasswd_exists' => file_exists(EFPP_HTPASSWD_FILE) ? 1 : 0,
         'login_page' => file_exists(EFPP_LOGIN_PAGE_FILE) ? 1 : 0,
@@ -565,11 +570,18 @@ function efppValidateData($data, $existing) {
     $clean['enable_http'] = !empty($data['enable_http']) ? 1 : 0;
     $clean['enable_https'] = !empty($data['enable_https']) ? 1 : 0;
 
-    // External access can only be turned on when at least one account exists
-    // (with no users the password file is removed and the login page would be
-    // unreachable for everyone).
-    if (($clean['enable_http'] || $clean['enable_https']) && empty(efppUsersFromSettings($existing))) {
-        $errors[] = 'Add at least one user in the Users tab before enabling HTTP or HTTPS access.';
+    // External access can only be turned on when an Admin account exists (a
+    // "user"-role account cannot manage the plugin, so with no admin the login
+    // page would be unreachable for anyone able to change it).
+    $hasAdmin = false;
+    foreach (efppUsersFromSettings($existing) as $u) {
+        if ($u['role'] === 'admin') {
+            $hasAdmin = true;
+            break;
+        }
+    }
+    if (($clean['enable_http'] || $clean['enable_https']) && !$hasAdmin) {
+        $errors[] = 'Add at least one Admin user in the Users tab before enabling HTTP or HTTPS access.';
     }
 
     $clean['use_public_ports'] = !empty($data['use_public_ports']) ? 1 : 0;
@@ -1023,16 +1035,25 @@ function efppDeleteUserEndpoint() {
     $users = efppUsersFromSettings($s);
 
     $found = false;
+    $foundIsAdmin = false;
+    $adminCount = 0;
     $kept = array();
     foreach ($users as $u) {
         if (strcasecmp($u['username'], $username) === 0) {
             $found = true;
+            $foundIsAdmin = ($u['role'] === 'admin');
         } else {
             $kept[] = $u;
+        }
+        if ($u['role'] === 'admin') {
+            $adminCount++;
         }
     }
     if (!$found) {
         return json(array('success' => false, 'messages' => array(), 'errors' => array('User not found.')));
+    }
+    if ($enabled && ($adminCount <= 1 && $foundIsAdmin)) {
+        return json(array('success' => false, 'messages' => array(), 'errors' => array('Cannot delete the last Admin user while external access is enabled. Uncheck both "Enable HTTP port" and "Enable HTTPS port" first.')));
     }
     if ($enabled && count($users) <= 1) {
         return json(array('success' => false, 'messages' => array(), 'errors' => array('Cannot delete the last user while external access is enabled. Uncheck both "Enable HTTP port" and "Enable HTTPS port" first.')));
