@@ -37,6 +37,10 @@ define('CHANGE_PW_URL', '/change-password.html');
 define('ACCESS_DENIED_FILE', LOGIN_PAGE_DIR . '/access-denied.html');
 define('ACCESS_DENIED_TEMPLATE', PLUGIN_DIR . '/templates/access-denied.html');
 define('ACCESS_DENIED_URL', '/access-denied.html');
+define('FPP_WWW_DIR', '/opt/fpp/www');
+define('FPP_CONFIG_FILE', FPP_WWW_DIR . '/config.php');
+define('FPP_UI_LEVEL_ANCHOR', '$uiLevel = $settings[\'uiLevel\'];');
+define('FPP_UI_LEVEL_START', '// ExternalFPP plugin: force the Basic UI for non-Admin external proxy users. (start)');
  // After a successful form login, mod_auth_form redirects here. It is a plugin
  // API endpoint that 302s the visitor to either the FPP UI or the change-password
  // page (when their account needs a forced change), so the change-password page
@@ -255,6 +259,84 @@ function efppEnsurePages() {
 }
 
 /**
+ * Patches FPP's www/config.php so that requests arriving through the external
+ * proxy (detected by the X-FPP-Ext-User header set in the Apache vhost) are
+ * forced down to the Basic UI level unless the account is in the efpp-admin
+ * group. The patch block's membership check reads the group file on every
+ * request, so role changes apply immediately. The block is inserted just
+ * before "$uiLevel = $settings['uiLevel'];" (after the temporary override
+ * cookie handling) and is flagged with a marker so the patch is idempotent and
+ * FPP version updates that rewrite config.php re-patch cleanly on next apply.
+ */
+function efppPatchFppUiLevel() {
+    if (!file_exists(FPP_CONFIG_FILE)) {
+        return array(false, 'FPP config not found (' . FPP_CONFIG_FILE . '); skipping UI level patch.');
+    }
+    $contents = @file_get_contents(FPP_CONFIG_FILE);
+    if ($contents === false) {
+        return array(false, 'Could not read ' . FPP_CONFIG_FILE . ' for UI level patching.');
+    }
+    if (strpos($contents, FPP_UI_LEVEL_START) !== false) {
+        return array(true, 'FPP UI level patch already applied.');
+    }
+    if (strpos($contents, FPP_UI_LEVEL_ANCHOR) === false) {
+        return array(false, 'Could not find the uiLevel anchor in ' . FPP_CONFIG_FILE . '; skipping UI level patch.');
+    }
+
+    $groupsPath = GROUPS_FILE;
+    $block = "\n" . FPP_UI_LEVEL_START . "\n"
+        . 'if (!empty($_SERVER[\'HTTP_X_FPP_EXT_USER\'] ?? \'\')) {' . "\n"
+        . '    $__efppGroupsFile = ' . var_export($groupsPath, true) . ';' . "\n"
+        . '    $__efppIsAdmin = false;' . "\n"
+        . '    if (is_readable($__efppGroupsFile)) {' . "\n"
+        . '        foreach (file($__efppGroupsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $__efppLine) {' . "\n"
+        . '            if (stripos($__efppLine, \'efpp-admin:\') === 0) {' . "\n"
+        . '                list(, $__efppMembers) = explode(\':\', $__efppLine, 2);' . "\n"
+        . '                $__efppAdmins = preg_split(\'/\\s+/\', trim($__efppMembers), -1, PREG_SPLIT_NO_EMPTY);' . "\n"
+        . '                $__efppIsAdmin = in_array($_SERVER[\'HTTP_X_FPP_EXT_USER\'], $__efppAdmins, true);' . "\n"
+        . '                break;' . "\n"
+        . '            }' . "\n"
+        . '        }' . "\n"
+        . '    }' . "\n"
+        . '    if (!$__efppIsAdmin) {' . "\n"
+        . "        \$settings['uiLevel'] = 0;" . "\n"
+        . '    }' . "\n"
+        . '    unset($__efppGroupsFile, $__efppIsAdmin, $__efppLine, $__efppMembers, $__efppAdmins);' . "\n"
+        . '}' . "\n"
+        . '// ExternalFPP plugin: force the Basic UI for non-Admin external proxy users. (end)' . "\n";
+
+    $newContents = str_replace(FPP_UI_LEVEL_ANCHOR, $block . FPP_UI_LEVEL_ANCHOR, $contents);
+    if ($newContents === $contents) {
+        return array(false, 'UI level patch produced no change to ' . FPP_CONFIG_FILE . '.');
+    }
+
+    // Back up the pristine FPP file once so the patch is easy to remove by hand.
+    $backup = FPP_CONFIG_FILE . '.efpp-bak';
+    if (!file_exists($backup)) {
+        @copy(FPP_CONFIG_FILE, $backup);
+    }
+
+    if (efppIsRoot()) {
+        $ok = @file_put_contents(FPP_CONFIG_FILE, $newContents);
+    } else {
+        // Writing as non-root: sudo-tee it through a root shell.
+        $tmp = sys_get_temp_dir() . '/fpp-ui-level.patch.php';
+        if (@file_put_contents($tmp, $newContents)) {
+            $r = efppRun('sudo cp ' . escapeshellarg($tmp) . ' ' . escapeshellarg(FPP_CONFIG_FILE));
+            @unlink($tmp);
+            $ok = ($r['code'] === 0);
+        } else {
+            $ok = false;
+        }
+    }
+    if (!$ok) {
+        return array(false, 'Could not write the UI level patch to ' . FPP_CONFIG_FILE . '.');
+    }
+    efppLog('Patched FPP config.php for external Basic UI (non-Admin) enforcement');
+    return array(true, 'Patched FPP config.php to force the Basic UI for external non-Admin users.');
+}
+
+/**
  * Writes every user to the Apache password file. Uses the stored bcrypt hash
  * directly (Apache accepts $2y$ natively), so no plaintext is ever written.
  * Returns array(true, message) on success, array(false, error) on failure.
@@ -398,12 +480,12 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '    </Proxy>';
     $lines[] = '';
     $lines[] = '    # Everything except the local pages (login, change password, access';
-    $lines[] = '    # denied, settings, network config) is protected by a form login.';
-    $lines[] = '    # Requests without a valid session are redirected to the login page;';
-    $lines[] = '    # the login form POSTs back here and on success Apache sets the';
-    $lines[] = '    # session cookie. settings.php and networkconfig.php get their own';
-    $lines[] = '    # admin-only rule below.';
-    $lines[] = '    <LocationMatch "^/(?!(login\\.html|change-password\\.html|access-denied\\.html|settings\\.php|networkconfig\\.php))">';
+    $lines[] = '    # denied, settings, network config, plugins, file manager, backup) is';
+    $lines[] = '    # protected by a form login. Requests without a valid session are';
+    $lines[] = '    # redirected to the login page; the login form POSTs back here and on';
+    $lines[] = '    # success Apache sets the session cookie. The admin-only pages get their';
+    $lines[] = '    # own rule below.';
+    $lines[] = '    <LocationMatch "^/(?!(login\\.html|change-password\\.html|access-denied\\.html|settings\\.php|plugin\\.php|plugins\\.php|filemanager\\.php|backup\\.php|networkconfig\\.php))">';
     $lines[] = '        AuthType Form';
     $lines[] = '        AuthName "' . REALM . '"';
     $lines[] = '        AuthFormProvider file';
@@ -412,15 +494,21 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '        AuthFormLoginSuccessLocation ' . LOGIN_SUCCESS_URL;
     $lines[] = '        AuthFormLogoutLocation ' . LOGIN_PAGE_URL;
     $lines[] = '        Require valid-user';
+    $lines[] = '        # FPP reads this header (see efppPatchFppUiLevel) to strip non-Admin';
+    $lines[] = '        # accounts down to the Basic UI. Set after auth so %{REMOTE_USER} is';
+    $lines[] = '        # populated, and unset first so clients cannot spoof the header.';
+    $lines[] = '        RequestHeader unset X-FPP-Ext-User';
+    $lines[] = '        RequestHeader set X-FPP-Ext-User "%{REMOTE_USER}s"';
     $lines[] = '    </LocationMatch>';
     $lines[] = '';
-    $lines[] = '    # settings.php and networkconfig.php are admin-only. This more specific';
-    $lines[] = '    # section combines with the form auth above (both conditions must pass):';
-    $lines[] = '    # visitors without a session are still sent to the login page, while';
-    $lines[] = '    # logged-in non-Admin accounts are shown the access-denied page via the';
-    $lines[] = '    # ErrorDocument below. Membership is read from the group file on every';
-    $lines[] = '    # request, so role changes apply immediately without reloading Apache.';
-    $lines[] = '    <LocationMatch "^/(settings\\.php|networkconfig\\.php)$">';
+    $lines[] = '    # settings.php, networkconfig.php, plugin.php, plugins.php, filemanager.php';
+    $lines[] = '    # and backup.php are admin-only. This more specific section combines with';
+    $lines[] = '    # the form auth above (both conditions must pass): visitors without a';
+    $lines[] = '    # session are still sent to the login page, while logged-in non-Admin';
+    $lines[] = '    # accounts are shown the access-denied page via the ErrorDocument below.';
+    $lines[] = '    # Membership is read from the group file on every request, so role';
+    $lines[] = '    # changes apply immediately without reloading Apache.';
+    $lines[] = '    <LocationMatch "^/(settings\\.php|networkconfig\\.php|plugin\\.php|plugins\\.php|filemanager\\.php|backup\\.php)$">';
     $lines[] = '        AuthType Form';
     $lines[] = '        AuthName "' . REALM . '"';
     $lines[] = '        AuthFormProvider file';
@@ -433,6 +521,8 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '            Require valid-user';
     $lines[] = '            Require group ' . ADMIN_GROUP_NAME;
     $lines[] = '        </RequireAll>';
+    $lines[] = '        RequestHeader unset X-FPP-Ext-User';
+    $lines[] = '        RequestHeader set X-FPP-Ext-User "%{REMOTE_USER}s"';
     $lines[] = '        ErrorDocument 401 ' . ACCESS_DENIED_URL;
     $lines[] = '        ErrorDocument 403 ' . ACCESS_DENIED_URL;
     $lines[] = '    </LocationMatch>';
@@ -576,6 +666,7 @@ function efppApply() {
 
     efppEnsureConfigDir();
     efppEnsurePages();
+    efppPatchFppUiLevel();
 
     // Always make sure the required Apache modules are present (idempotent).
     list($missingMods, $newlyEnabledMods) = efppEnableModules();
