@@ -18,17 +18,28 @@ PLUGIN_DIR="$(dirname "${SCRIPT_DIR}")"
 
 # --- Preserve user configuration across any git operations ---
 BACKUP_DIR="/tmp/fpp-ExternalFPP-backup"
-mkdir -p "${BACKUP_DIR}"
+PRESERVED_PAGES="login.html change-password.html access-denied.html"
+mkdir -p "${BACKUP_DIR}/www" "${BACKUP_DIR}/templates"
 if [ -f "${PLUGIN_DIR}/config/settings.json" ]; then
     cp "${PLUGIN_DIR}/config/settings.json" "${BACKUP_DIR}/settings.json" 2>/dev/null || true
 fi
 if [ -f "${PLUGIN_DIR}/config/plugin.fpp-ExternalFPP.htpasswd" ]; then
     cp "${PLUGIN_DIR}/config/plugin.fpp-ExternalFPP.htpasswd" "${BACKUP_DIR}/htpasswd" 2>/dev/null || true
 fi
-if [ -f "${PLUGIN_DIR}/www/login.html" ]; then
-    mkdir -p "${BACKUP_DIR}/www"
-    cp "${PLUGIN_DIR}/www/login.html" "${BACKUP_DIR}/www/login.html" 2>/dev/null || true
+if [ -f "${PLUGIN_DIR}/config/plugin.fpp-ExternalFPP.groups" ]; then
+    cp "${PLUGIN_DIR}/config/plugin.fpp-ExternalFPP.groups" "${BACKUP_DIR}/groups" 2>/dev/null || true
 fi
+# Back up each user-editable page along with its current template, so after the
+# update we can tell whether the page was customized (restore it verbatim) or
+# left at the default (refresh it to the freshly-updated template).
+for page in ${PRESERVED_PAGES}; do
+    if [ -f "${PLUGIN_DIR}/www/${page}" ]; then
+        cp "${PLUGIN_DIR}/www/${page}" "${BACKUP_DIR}/www/${page}" 2>/dev/null || true
+    fi
+    if [ -f "${PLUGIN_DIR}/templates/${page}" ]; then
+        cp "${PLUGIN_DIR}/templates/${page}" "${BACKUP_DIR}/templates/${page}" 2>/dev/null || true
+    fi
+done
 
 # If the plugin is a git clone, update it (best effort)
 if [ -d "${PLUGIN_DIR}/.git" ]; then
@@ -39,17 +50,36 @@ if [ -d "${PLUGIN_DIR}/.git" ]; then
 fi
 
 # Restore user configuration saved before the git operations
-mkdir -p "${PLUGIN_DIR}/config"
+mkdir -p "${PLUGIN_DIR}/config" "${PLUGIN_DIR}/www"
 if [ -f "${BACKUP_DIR}/settings.json" ]; then
     cp "${BACKUP_DIR}/settings.json" "${PLUGIN_DIR}/config/settings.json" 2>/dev/null || true
 fi
 if [ -f "${BACKUP_DIR}/htpasswd" ]; then
     cp "${BACKUP_DIR}/htpasswd" "${PLUGIN_DIR}/config/plugin.fpp-ExternalFPP.htpasswd" 2>/dev/null || true
 fi
-if [ -f "${BACKUP_DIR}/www/login.html" ]; then
-    mkdir -p "${PLUGIN_DIR}/www"
-    cp "${BACKUP_DIR}/www/login.html" "${PLUGIN_DIR}/www/login.html" 2>/dev/null || true
+if [ -f "${BACKUP_DIR}/groups" ]; then
+    cp "${BACKUP_DIR}/groups" "${PLUGIN_DIR}/config/plugin.fpp-ExternalFPP.groups" 2>/dev/null || true
 fi
+# Customized pages are kept as the user left them; pages still at the default
+# are rolled forward to the updated template so bundled page fixes apply.
+for page in ${PRESERVED_PAGES}; do
+    old_page="${BACKUP_DIR}/www/${page}"
+    old_template="${BACKUP_DIR}/templates/${page}"
+    new_template="${PLUGIN_DIR}/templates/${page}"
+    if [ -f "${old_page}" ]; then
+        if [ -f "${old_template}" ] && cmp -s "${old_page}" "${old_template}"; then
+            # Page was unmodified, so take the freshly-updated default template.
+            if [ -f "${new_template}" ]; then
+                cp "${new_template}" "${PLUGIN_DIR}/www/${page}" 2>/dev/null || true
+            else
+                rm -f "${PLUGIN_DIR}/www/${page}"
+            fi
+        else
+            # Page was customized (or had no template to compare): keep it.
+            cp "${old_page}" "${PLUGIN_DIR}/www/${page}" 2>/dev/null || true
+        fi
+    fi
+done
 rm -rf "${BACKUP_DIR}"
 
 # --- Write default settings on a fresh install ---

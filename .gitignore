@@ -4,12 +4,17 @@
 
 /config/settings.json
 /config/plugin.fpp-ExternalFPP.htpasswd
+/config/plugin.fpp-ExternalFPP.groups
+/config/public-check.json
 
 # User-editable login page (default template lives in templates/login.html)
 /www/login.html
 
 # User-editable change password page (default template lives in templates/change-password.html)
 /www/change-password.html
+
+# User-editable access denied page (default template lives in templates/access-denied.html)
+/www/access-denied.html
 
 # Local Apache test output
 /etc/
