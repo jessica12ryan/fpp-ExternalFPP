@@ -118,12 +118,21 @@ $deniedCustom = efppPageCustomized($pluginDir . '/www/access-denied.html', $plug
                     <li>Everything else (styling, branding, extra fields) is optional.</li>
                 </ul>
 
-                <p>Minimal working form:</p>
-                <pre>&lt;form method="post" action="/"&gt;
-    &lt;input type="text"     name="httpd_username" placeholder="Username" required&gt;
+                <p>Minimal working code:</p>
+                <pre>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+&lt;meta charset="utf-8"&gt;
+&lt;title&gt;External FPP Web Access&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;form method="post" action="/"&gt;
+    &lt;input type="text" name="httpd_username" placeholder="Username" required&gt;
     &lt;input type="password" name="httpd_password" placeholder="Password" required&gt;
     &lt;button type="submit"&gt;Sign In&lt;/button&gt;
-&lt;/form&gt;</pre>
+  &lt;/form&gt;
+&lt;/body&gt;
+&lt;/html&gt;</pre>
 
                 <p>Notes:</p>
                 <ul>
@@ -169,37 +178,32 @@ $deniedCustom = efppPageCustomized($pluginDir . '/www/access-denied.html', $plug
                     The page must ask for the new password twice and post it to the plugin API. The
                     username is taken from the signed-in Apache session, never typed by the visitor.
                 </p>
-                <p>Minimal working form:</p>
-                <pre>&lt;input type="password" id="pw1" placeholder="New password"&gt;
-&lt;input type="password" id="pw2" placeholder="Confirm new password"&gt;
-&lt;button id="save"&gt;Change Password&lt;/button&gt;
-&lt;script&gt;
-// Users who do not have to change their password are sent on to the FPP UI.
-fetch("/api/plugin/fpp-ExternalFPP/session-user")
-  .then(function (r) { return r.json(); })
-  .then(function (s) {
-    if (s.success &amp;&amp; !s.must_change) { window.location.replace("/"); }
-  });
-
-document.getElementById("save").addEventListener("click", function () {
-  fetch("/api/plugin/fpp-ExternalFPP/change-my-password", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      password: document.getElementById("pw1").value,
-      password_confirm: document.getElementById("pw2").value
-    })
-  }).then(function (r) { return r.json(); }).then(function (d) {
-    if (d.success) {
-      // The API re-issues the login session cookie with the new password, so
-      // the visitor stays signed in and continues straight into the FPP UI.
-      window.location.replace("/");
-    } else {
-      alert((d.errors || []).join(" "));
-    }
-  });
-});
-&lt;/script&gt;</pre>
+                <p>Minimal working code:</p>
+                <pre>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+&lt;meta charset="utf-8"&gt;
+&lt;title&gt;Change Password&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;input type="password" id="pw1" placeholder="New password"&gt;
+  &lt;input type="password" id="pw2" placeholder="Confirm new password"&gt;
+  &lt;button id="save"&gt;Change Password&lt;/button&gt;
+  &lt;script&gt;
+    fetch("/api/plugin/fpp-ExternalFPP/session-user")
+      .then(r =&gt; r.json())
+      .then(s =&gt; { if (s.success &amp;&amp; !s.must_change) location.replace("/"); });
+    document.getElementById("save").onclick = function () {
+      fetch("/api/plugin/fpp-ExternalFPP/change-my-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw1.value, password_confirm: pw2.value })
+      }).then(r =&gt; r.json())
+        .then(d =&gt; d.success ? location.replace("/") : alert((d.errors || []).join(" ")));
+    };
+  &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</pre>
 
                 <p>Notes:</p>
                 <ul>
@@ -246,14 +250,21 @@ document.getElementById("save").addEventListener("click", function () {
         <fieldset class="border p-3">
             <legend>Required Code &mdash; Access Denied Page</legend>
             <div class="p-3">
-                <p>For the page to be useful it should give the visitor a way out:</p>
-                <ul>
-                    <li>A <b>Home</b> button linking to <code>&lt;a href="/"&gt;</code> so they can
-                        return to the FPP web UI.</li>
-                    <li>A <b>Go Back</b> button using <code>history.back()</code> so they can return to
-                        the previous page they were on.</li>
-                    <li>Everything else (styling, messaging, branding) is completely optional.</li>
-                </ul>
+                <p>Give the visitor a way out &mdash; back to the FPP UI or the page they came from.
+                    Everything else (styling, messaging, branding) is optional.</p>
+                <p>Minimal working code:</p>
+                <pre>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+&lt;meta charset="utf-8"&gt;
+&lt;title&gt;Access Denied&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;p&gt;Your account does not have permission to open this page.&lt;/p&gt;
+  &lt;a href="/"&gt;Home&lt;/a&gt;
+  &lt;button type="button" onclick="history.back()"&gt;Go Back&lt;/button&gt;
+&lt;/body&gt;
+&lt;/html&gt;</pre>
             </div>
         </fieldset>
     </div>
