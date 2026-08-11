@@ -106,17 +106,10 @@ $deniedCustom = efppPageCustomized($pluginDir . '/www/access-denied.html', $plug
             <legend>Required Code &mdash; Login Page</legend>
             <div class="p-3">
                 <p>
-                    Apache's form login handler (mod_auth_form) reads the page when a visitor is not
-                    signed in. The page <b>must</b> contain all of the following, otherwise logging
-                    in will not work:
+                    This is the page visitors land on when they open the external port and are not
+                    signed in. It lets them sign in with the credentials configured in the
+                    <b>Users</b> tab so they can continue to the FPP web UI.
                 </p>
-                <ul>
-                    <li>A <code>&lt;form&gt;</code> element that uses <code>method="post"</code> and
-                        posts to the protected port, e.g. <code>action="/"</code>.</li>
-                    <li>An <code>&lt;input name="httpd_username"&gt;</code> field for the username.</li>
-                    <li>An <code>&lt;input name="httpd_password"&gt;</code> field for the password.</li>
-                    <li>Everything else (styling, branding, extra fields) is optional.</li>
-                </ul>
 
                 <p>Minimal working code:</p>
                 <pre>&lt;!DOCTYPE html&gt;
