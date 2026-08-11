@@ -14,6 +14,14 @@
 
 $pluginDir = __DIR__;
 
+// Load the shared backend helpers (efppPageCustomized/efppNormalizePageText,
+// constants for page/template paths). tabs.inc requires api.php too, but only
+// when efppSessionIsUser is undefined; require it up front so the badge state
+// below can be computed before the tab bar is rendered.
+if (!function_exists('efppPageCustomized')) {
+	require_once __DIR__ . '/api.php';
+}
+
 function efppPageContent($pluginDir, $file, $template) {
     $path = $pluginDir . $file;
     if (file_exists($path)) {
@@ -33,11 +41,14 @@ $loginPageContent = efppPageContent($pluginDir, '/www/login.html', '/templates/l
 $changePwContent = efppPageContent($pluginDir, '/www/change-password.html', '/templates/change-password.html');
 $deniedPageContent = efppPageContent($pluginDir, '/www/access-denied.html', '/templates/access-denied.html');
 
-// The bundled originals, embedded into the page so the editor can flag when the
-// live page differs from them.
-$loginTpl = (string)@file_get_contents($pluginDir . '/templates/login.html');
-$changeTpl = (string)@file_get_contents($pluginDir . '/templates/change-password.html');
-$deniedTpl = (string)@file_get_contents($pluginDir . '/templates/access-denied.html');
+// Whether each page differs from its bundled template. Computed server-side
+// (direct file comparison) so the badge reflects the saved state, and is not
+// thrown off by HTML entity/whitespace round-tripping in the textarea.
+// Reuses efppPageCustomized/efppNormalizePageText from api.php (loaded via
+// tabs.inc below), which compare full file paths against full template paths.
+$loginCustom = efppPageCustomized($pluginDir . '/www/login.html', $pluginDir . '/templates/login.html');
+$changeCustom = efppPageCustomized($pluginDir . '/www/change-password.html', $pluginDir . '/templates/change-password.html');
+$deniedCustom = efppPageCustomized($pluginDir . '/www/access-denied.html', $pluginDir . '/templates/access-denied.html');
 ?>
 
 <?php include __DIR__ . '/tabs.inc'; ?>
@@ -249,16 +260,14 @@ document.getElementById("save").addEventListener("click", function () {
 </div>
 
 <script>
-// Bundled originals, embedded safely for JavaScript. JSON_HEX_TAG escapes the
-// angle brackets as \u003C/\u003E (which decode back to the exact original), so
-// a closing script tag inside a template can't break out of this script block
-// while the comparison in efppCustomBadge still sees the true template text.
-// NOTE: never write a literal closing-script sequence in this comment, since
-// the HTML parser would end the script element there and swallow the rest.
-var EFPP_TPL = {
-    login: <?php echo json_encode($loginTpl, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES); ?>,
-    change: <?php echo json_encode($changeTpl, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES); ?>,
-    denied: <?php echo json_encode($deniedTpl, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES); ?>
+// Initial customized state, computed server-side by comparing each page file
+// against its bundled template. The badge is updated only when a page is saved
+// or reset (see efppPages.save / efppPages.reset), so it reflects the saved
+// state rather than live edits in the textarea.
+var EFPP_CUSTOM = {
+    login: <?php echo (int)$loginCustom; ?>,
+    change: <?php echo (int)$changeCustom; ?>,
+    denied: <?php echo (int)$deniedCustom; ?>
 };
 
 // Per-page editor ids and API endpoints.
@@ -277,14 +286,18 @@ function efppPageEndpoints(page) {
     };
 }
 
-function efppCustomBadge(page) {
+// Set the badge from a server-computed customized flag (1 = customized).
+function efppSetBadge(page, custom) {
     var f = efppPageFields(page);
-    var current = String($(f.ta).val()).replace(/\r\n/g, "\n").trim();
-    var original = String(EFPP_TPL[page]).replace(/\r\n/g, "\n").trim();
-    var custom = current !== original;
+    custom = custom ? true : false;
+    EFPP_CUSTOM[page] = custom ? 1 : 0;
     $(f.badge)
         .text(custom ? 'Customized' : 'Default')
         .attr('class', 'efpp-custom-badge ' + (custom ? 'efpp-custom' : 'efpp-default'));
+}
+
+function efppCustomBadge(page) {
+    efppSetBadge(page, EFPP_CUSTOM[page] === 1);
 }
 
 var efppPages = {
@@ -326,7 +339,11 @@ var efppPages = {
             dataType: 'json',
             success: function(data) {
                 efppPages.renderResult(page, data);
-                efppCustomBadge(page);
+                if (data.customized !== undefined) {
+                    efppSetBadge(page, data.customized);
+                } else {
+                    efppCustomBadge(page);
+                }
             },
             error: function(xhr) {
                 efppPages.renderResult(page, { success: false, errors: ['Could not reach the plugin API. Check the FPP web server logs.'] });
@@ -350,6 +367,11 @@ var efppPages = {
             dataType: 'json',
             success: function(data) {
                 efppPages.renderResult(page, data);
+                if (data.customized !== undefined) {
+                    efppSetBadge(page, data.customized);
+                } else {
+                    efppCustomBadge(page);
+                }
                 if (data.success) {
                     $.ajax({
                         url: efppPages.apiBase + '/' + ep.get,
@@ -393,9 +415,6 @@ $(document).ready(function() {
     efppCustomBadge('login');
     efppCustomBadge('change');
     efppCustomBadge('denied');
-    $('#efpp_login_page').on('input', function() { efppCustomBadge('login'); });
-    $('#efpp_change_pw_page').on('input', function() { efppCustomBadge('change'); });
-    $('#efpp_denied_page').on('input', function() { efppCustomBadge('denied'); });
 
     $.ajax({
         url: efppPages.apiBase + '/status',

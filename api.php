@@ -370,8 +370,21 @@ function efppValidateLoginPage($content) {
     return array(array(), $warnings);
 }
 
+function efppPageCustomized($file, $template) {
+    if (!file_exists($file)) {
+        return 0;
+    }
+    $c = (string)@file_get_contents($file);
+    $t = file_exists($template) ? (string)@file_get_contents($template) : '';
+    return efppNormalizePageText($c) === efppNormalizePageText($t) ? 0 : 1;
+}
+
+function efppNormalizePageText($s) {
+    return trim(str_replace("\r\n", "\n", $s));
+}
+
 function efppLoginPageEndpoint() {
-    return json(array('success' => true, 'content' => efppLoginPageContent()));
+    return json(array('success' => true, 'content' => efppLoginPageContent(), 'customized' => efppPageCustomized(EFPP_LOGIN_PAGE_FILE, EFPP_LOGIN_PAGE_TEMPLATE)));
 }
 
 function efppSaveLoginPageEndpoint() {
@@ -401,14 +414,14 @@ function efppSaveLoginPageEndpoint() {
         return json(array('success' => false, 'messages' => array(), 'warnings' => $warnings, 'errors' => $errors));
     }
     efppLog('Login page saved');
-    return json(array('success' => true, 'messages' => array('Login page saved.'), 'warnings' => $warnings, 'errors' => array()));
+    return json(array('success' => true, 'messages' => array('Login page saved.'), 'warnings' => $warnings, 'errors' => array(), 'customized' => efppPageCustomized(EFPP_LOGIN_PAGE_FILE, EFPP_LOGIN_PAGE_TEMPLATE)));
 }
 
 function efppResetLoginPageEndpoint() {
     if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
-    return efppResetPage(EFPP_LOGIN_PAGE_FILE, 'efppDefaultLoginPage', 'login page');
+    return efppResetPage(EFPP_LOGIN_PAGE_FILE, 'efppDefaultLoginPage', 'login page', EFPP_LOGIN_PAGE_TEMPLATE);
 }
 
 function efppDefaultChangePasswordPage() {
@@ -459,21 +472,21 @@ function efppValidateChangePasswordPage($content) {
 }
 
 function efppGetChangePasswordPageEndpoint() {
-    return json(array('success' => true, 'content' => efppChangePasswordPageContent()));
+    return json(array('success' => true, 'content' => efppChangePasswordPageContent(), 'customized' => efppPageCustomized(EFPP_CHANGE_PW_FILE, EFPP_CHANGE_PW_TEMPLATE)));
 }
 
 function efppSaveChangePasswordPageEndpoint() {
     if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
-    return efppSavePage(EFPP_CHANGE_PW_FILE, 'efppValidateChangePasswordPage', 'change password page');
+    return efppSavePage(EFPP_CHANGE_PW_FILE, 'efppValidateChangePasswordPage', 'change password page', EFPP_CHANGE_PW_TEMPLATE);
 }
 
 function efppResetChangePasswordPageEndpoint() {
     if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
-    return efppResetPage(EFPP_CHANGE_PW_FILE, 'efppDefaultChangePasswordPage', 'change password page');
+    return efppResetPage(EFPP_CHANGE_PW_FILE, 'efppDefaultChangePasswordPage', 'change password page', EFPP_CHANGE_PW_TEMPLATE);
 }
 
 function efppDefaultAccessDeniedPage() {
@@ -518,24 +531,24 @@ function efppValidateAccessDeniedPage($content) {
 }
 
 function efppGetAccessDeniedPageEndpoint() {
-    return json(array('success' => true, 'content' => efppAccessDeniedPageContent()));
+    return json(array('success' => true, 'content' => efppAccessDeniedPageContent(), 'customized' => efppPageCustomized(EFPP_ACCESS_DENIED_FILE, EFPP_ACCESS_DENIED_TEMPLATE)));
 }
 
 function efppSaveAccessDeniedPageEndpoint() {
     if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
-    return efppSavePage(EFPP_ACCESS_DENIED_FILE, 'efppValidateAccessDeniedPage', 'access denied page');
+    return efppSavePage(EFPP_ACCESS_DENIED_FILE, 'efppValidateAccessDeniedPage', 'access denied page', EFPP_ACCESS_DENIED_TEMPLATE);
 }
 
 function efppResetAccessDeniedPageEndpoint() {
     if (efppSessionIsLimited()) {
         return efppAdminOnlyError();
     }
-    return efppResetPage(EFPP_ACCESS_DENIED_FILE, 'efppDefaultAccessDeniedPage', 'access denied page');
+    return efppResetPage(EFPP_ACCESS_DENIED_FILE, 'efppDefaultAccessDeniedPage', 'access denied page', EFPP_ACCESS_DENIED_TEMPLATE);
 }
 
-function efppSavePage($file, $validatorFn, $label) {
+function efppSavePage($file, $validatorFn, $label, $template) {
     $data = $_POST;
     if (empty($data)) {
         $raw = json_decode(file_get_contents('php://input'), true);
@@ -559,10 +572,10 @@ function efppSavePage($file, $validatorFn, $label) {
         return json(array('success' => false, 'messages' => array(), 'warnings' => $warnings, 'errors' => $errors));
     }
     efppLog(ucfirst($label) . ' saved');
-    return json(array('success' => true, 'messages' => array(ucfirst($label) . ' saved.'), 'warnings' => $warnings, 'errors' => array()));
+    return json(array('success' => true, 'messages' => array(ucfirst($label) . ' saved.'), 'warnings' => $warnings, 'errors' => array(), 'customized' => efppPageCustomized($file, $template)));
 }
 
-function efppResetPage($file, $defaultFn, $label) {
+function efppResetPage($file, $defaultFn, $label, $template) {
     if (!is_dir(EFPP_LOGIN_PAGE_DIR)) {
         @mkdir(EFPP_LOGIN_PAGE_DIR, 0775, true);
     }
@@ -570,7 +583,7 @@ function efppResetPage($file, $defaultFn, $label) {
         return json(array('success' => false, 'messages' => array(), 'warnings' => array(), 'errors' => array('Could not write the ' . $label . '. Check file permissions.')));
     }
     efppLog(ucfirst($label) . ' reset to default');
-    return json(array('success' => true, 'messages' => array(ucfirst($label) . ' reset to the default template.'), 'warnings' => array(), 'errors' => array()));
+    return json(array('success' => true, 'messages' => array(ucfirst($label) . ' reset to the default template.'), 'warnings' => array(), 'errors' => array(), 'customized' => efppPageCustomized($file, $template)));
 }
 
 function efppStatusData() {
