@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 #############################################################
 ## External FPP Web Access (fpp-ExternalFPP)               ##
