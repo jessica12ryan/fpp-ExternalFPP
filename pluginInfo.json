@@ -7,6 +7,61 @@
 	"srcURL": "https://github.com/jessica12ryan/fpp-ExternalFPP.git",
 	"bugURL": "https://github.com/jessica12ryan/fpp-ExternalFPP/issues",
 	"iconURL": "https://raw.githubusercontent.com/jessica12ryan/fpp-ExternalFPP/main/icon.png",
+	"privacy": {
+		"summary": "Adds a password-protected copy of the FPP web interface on extra ports. When you check public access it asks online services for your public address and whether the port is reachable.",
+		"sends": [
+			{
+				"to": "api.ipify.org",
+				"what": "your public address lookup",
+				"why": "to learn your public address for the External URL check",
+				"alwaysOn": false
+			},
+			{
+				"to": "ipv4.icanhazip.com",
+				"what": "your public address lookup",
+				"why": "to learn your public address for the External URL check (fallback)",
+				"alwaysOn": false
+			},
+			{
+				"to": "ifconfig.me",
+				"what": "your public address lookup",
+				"why": "to learn your public address for the External URL check (fallback)",
+				"alwaysOn": false
+			},
+			{
+				"to": "check-host.net",
+				"what": "your public address and port",
+				"why": "to test if the external port is reachable from the internet",
+				"alwaysOn": false
+			}
+		],
+		"collects": [
+			{
+				"what": "usernames and password hashes for external login",
+				"about": "operator",
+				"keptDays": null,
+				"canDelete": true,
+				"where": "/home/fpp/media/plugins/fpp-ExternalFPP/config/settings.json"
+			},
+			{
+				"what": "login attempts with username, time and address",
+				"about": "operator",
+				"keptDays": null,
+				"canDelete": false,
+				"where": "/home/fpp/media/logs/plugin-fpp-ExternalFPP.log"
+			}
+		],
+		"sensors": [],
+		"remoteAccess": "internet-authenticated",
+		"systemChanges": [
+			{
+				"kind": "network",
+				"what": "opens extra web ports (default 8080 and 8443) on your home network"
+			}
+		],
+		"closedCode": false,
+		"other": "none"
+	},
 	"versions": [
 		{
 			"minFPPVersion": "8.0",
