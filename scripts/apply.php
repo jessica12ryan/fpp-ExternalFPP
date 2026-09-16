@@ -105,9 +105,12 @@ function efppUsersFromSettings($s) {
     $users = array();
     foreach (($s['users'] ?? array()) as $u) {
         if (is_array($u) && isset($u['username']) && trim((string)$u['username']) !== '') {
+            $rawName = trim((string)$u['username']);
+            $rawName = str_replace(array("\r", "\n", "\0"), '', $rawName);
+            if ($rawName === '') continue;
             $role = (string)($u['role'] ?? 'admin');
             $users[] = array(
-                'username' => trim((string)$u['username']),
+                'username' => $rawName,
                 'password' => (string)($u['password'] ?? ''),
                 'role' => ($role === 'user') ? 'user' : 'admin'
             );
@@ -117,7 +120,7 @@ function efppUsersFromSettings($s) {
 }
 
 function efppPasswordIsHash($password) {
-    return is_string($password) && preg_match('/^\$2[abxy]\$/', $password) === 1;
+    return is_string($password) && preg_match('/^\$2[aby]\$\d{2}\$[.\/A-Za-z0-9]{53}$/', $password) === 1;
 }
 
 function efppHashPassword($plain) {
@@ -273,7 +276,9 @@ function efppWriteGroupFile($users) {
     $content = ADMIN_GROUP_NAME . ':';
     foreach ($users as $u) {
         if ($u['role'] === 'admin') {
-            $content .= ' ' . $u['username'];
+            $safeUser = str_replace(array("\r", "\n", ":", " "), '', $u['username']);
+            $safeUser = preg_replace('/\s+/', '', $safeUser);
+            if ($safeUser !== '') $content .= ' ' . $safeUser;
         }
     }
     $content .= "\n";
@@ -305,7 +310,8 @@ function efppWriteGroupFile($users) {
     $content = '';
     foreach ($users as $u) {
         $hash = efppPasswordIsHash($u['password']) ? $u['password'] : efppHashPassword($u['password']);
-        $content .= $u['username'] . ':' . $hash . "\n";
+        $safeUser = str_replace(array("\r", "\n", ":"), '', $u['username']);
+        $content .= $safeUser . ':' . $hash . "\n";
     }
     if (@file_put_contents(HTPASSWD_FILE, $content) === false) {
         return array(false, 'Could not write the password file to ' . HTPASSWD_FILE);
@@ -351,6 +357,11 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '    # client, so it is safe for the API to use for "change my own password".';
     $lines[] = '    RequestHeader unset X-Remote-User';
     $lines[] = '    RequestHeader set X-Remote-User "%{REMOTE_USER}s"';
+    $lines[] = '    # Marker that proves the request came through this vhost (server-set,';
+    $lines[] = '    # never from the client). Used by the API/page guards to distinguish';
+    $lines[] = '    # external vs normal FPP port without trusting Host headers.';
+    $lines[] = '    RequestHeader unset X-EFPP-Trusted';
+    $lines[] = '    RequestHeader set X-EFPP-Trusted "1"';
     $lines[] = '    # Forward the real client IP to the backend, which the plugin logs on';
     $lines[] = '    # login (the proxy would otherwise make REMOTE_ADDR look like 127.0.0.1).';
     $lines[] = '    # Replaced server-side, never trusted from the client.';
@@ -380,6 +391,7 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '    Alias ' . CHANGE_PW_URL . ' ' . $changePwFile;
     $lines[] = '    Alias ' . ACCESS_DENIED_URL . ' ' . $accessDeniedFile;
     $lines[] = '    <Directory ' . $loginPageDir . '>';
+    $lines[] = '        Options -Indexes';
     $lines[] = '        Require all granted';
     $lines[] = '    </Directory>';
     $lines[] = '    # The login page and the access-denied page must be reachable without a';
@@ -396,7 +408,11 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '';
     $lines[] = '    # Session cookie used by the form login. HTTP-only so page scripts can\'t read it.';
     $lines[] = '    Session On';
-    $lines[] = '    SessionCookieName ' . SESSION_COOKIE . ' path=/; httponly';
+    if ($https) {
+        $lines[] = '    SessionCookieName ' . SESSION_COOKIE . ' path=/; httponly; secure; SameSite=Lax';
+    } else {
+        $lines[] = '    SessionCookieName ' . SESSION_COOKIE . ' path=/; httponly; SameSite=Lax';
+    }
     $lines[] = '';
     $lines[] = '    # Logout: clears the session and returns the visitor to the login page.';
     $lines[] = '    # (form-logout-handler only runs after a valid session, so anonymous';

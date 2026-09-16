@@ -94,12 +94,18 @@ function efppUsersFromSettings($s) {
     $users = array();
     foreach (($s['users'] ?? array()) as $u) {
         if (is_array($u) && isset($u['username']) && trim((string)$u['username']) !== '') {
+            // Sanitize legacy values that may contain control chars before use.
+            // New writes are validated by efppValidateLoginUser, but existing
+            // installs must keep loading without hard failure.
+            $rawName = trim((string)$u['username']);
+            $rawName = str_replace(array("\r", "\n", "\0"), '', $rawName);
+            if ($rawName === '') continue;
             // A named role defaults to admin so accounts created before roles
             // existed remain fully privileged. Only the literal "user" is
             // treated as the limited role.
             $role = (string)($u['role'] ?? 'admin');
             $users[] = array(
-                'username' => trim((string)$u['username']),
+                'username' => $rawName,
                 'password' => (string)($u['password'] ?? ''),
                 'must_change' => !empty($u['must_change']) ? 1 : 0,
                 'role' => ($role === 'user') ? 'user' : 'admin'
@@ -114,7 +120,10 @@ function efppUsersList() {
 }
 
 function efppPasswordIsHash($password) {
-    return is_string($password) && preg_match('/^\$2[abxy]\$/', $password) === 1;
+    // Accept only well-formed bcrypt hashes (59-60 chars, $2y$/$2b$/$2a$).
+    // Prevents truncated "$2a$evil" from being treated as a hash and written
+    // verbatim to the htpasswd file.
+    return is_string($password) && preg_match('/^\$2[aby]\$\d{2}\$[.\/A-Za-z0-9]{53}$/', $password) === 1;
 }
 
 function efppHashPassword($plain) {
@@ -131,7 +140,9 @@ function efppWriteGroupsFile() {
     $content = EFPP_ADMIN_GROUP . ':';
     foreach ($users as $u) {
         if ($u['role'] === 'admin') {
-            $content .= ' ' . $u['username'];
+            $safeUser = str_replace(array("\r", "\n", ":", " "), '', $u['username']);
+            $safeUser = preg_replace('/\s+/', '', $safeUser);
+            if ($safeUser !== '') $content .= ' ' . $safeUser;
         }
     }
     $content .= "\n";
@@ -163,7 +174,9 @@ function efppWriteHtpasswd($users) {
     $content = '';
     foreach ($users as $u) {
         $hash = efppPasswordIsHash($u['password']) ? $u['password'] : efppHashPassword($u['password']);
-        $content .= $u['username'] . ':' . $hash . "\n";
+        // Defense in depth: strip CR/LF even though validation already rejects them.
+        $safeUser = str_replace(array("\r", "\n", ":"), '', $u['username']);
+        $content .= $safeUser . ':' . $hash . "\n";
     }
     if (@file_put_contents(EFPP_HTPASSWD_FILE, $content) === false) {
         return array(false, 'Could not write the password file to ' . EFPP_HTPASSWD_FILE);
@@ -174,11 +187,21 @@ function efppWriteHtpasswd($users) {
 function efppValidateLoginUser($username, $password, $confirm, $checkUnique, $existingUsers) {
     $errors = array();
     $username = trim((string)$username);
+    // Strip null bytes before checks so length/pattern tests are accurate.
+    $username = str_replace("\0", '', $username);
 
     if ($username === '') {
         $errors[] = 'Username is required.';
+    } elseif (preg_match('/[\r\n]/', $username)) {
+        $errors[] = 'Username cannot contain line breaks.';
+    } elseif (preg_match('/\s/', $username)) {
+        $errors[] = 'Username cannot contain spaces.';
     } elseif (strpos($username, ':') !== false) {
         $errors[] = 'Username cannot contain a colon (:).';
+    } elseif (preg_match('/[\x00-\x1f\x7f]/', $username)) {
+        $errors[] = 'Username cannot contain control characters.';
+    } elseif (!preg_match('/^[A-Za-z0-9._-]{1,32}$/', $username)) {
+        $errors[] = 'Username must be 1-32 letters, numbers, dot, underscore or hyphen.';
     }
 
     $password = (string)$password;
@@ -400,6 +423,11 @@ function efppSaveLoginPageEndpoint() {
     if (!is_string($content)) {
         return json(array('success' => false, 'messages' => array(), 'warnings' => array(), 'errors' => array('No page content received.')));
     }
+    // Non-breaking hardening: strip null bytes and enforce size limit to prevent SD fill.
+    $content = str_replace("\0", '', $content);
+    if (strlen($content) > 200 * 1024) {
+        return json(array('success' => false, 'messages' => array(), 'warnings' => array(), 'errors' => array('Page too large — maximum 200 KB.')));
+    }
 
     list($errors, $warnings) = efppValidateLoginPage($content);
 
@@ -557,6 +585,10 @@ function efppSavePage($file, $validatorFn, $label, $template) {
     $content = $data['content'] ?? null;
     if (!is_string($content)) {
         return json(array('success' => false, 'messages' => array(), 'warnings' => array(), 'errors' => array('No page content received.')));
+    }
+    $content = str_replace("\0", '', $content);
+    if (strlen($content) > 200 * 1024) {
+        return json(array('success' => false, 'messages' => array(), 'warnings' => array(), 'errors' => array('Page too large — maximum 200 KB.')));
     }
 
     list($errors, $warnings) = call_user_func($validatorFn, $content);
@@ -846,13 +878,24 @@ function efppUsersEndpoint() {
 }
 
 function efppSessionUser() {
-    // Preferred: the username Apache recorded in the session. The external vhost
-    // forwards it as X-Remote-User, but that can arrive as the literal "(null)"
-    // when the header is interpolated before REMOTE_USER is populated.
+    // Trusted path: Apache sets REMOTE_USER after mod_auth_form succeeds, and
+    // the vhost sets X-EFPP-Trusted server-side. This is not spoofable.
+    if (!empty($_SERVER['HTTP_X_EFPP_TRUSTED']) && !empty($_SERVER['REMOTE_USER'])) {
+        $ru = trim((string)$_SERVER['REMOTE_USER']);
+        if ($ru !== '' && $ru !== '(null)') {
+            return $ru;
+        }
+    }
+    // Legacy: X-Remote-User forwarded by the vhost as "%{REMOTE_USER}s".
+    // Only trusted when the vhost marker is present; otherwise client-spoofable.
     $h = trim((string)($_SERVER['HTTP_X_REMOTE_USER'] ?? ''));
-    if ($h !== '' && $h !== '(null)') {
+    if ($h !== '' && $h !== '(null)' && !empty($_SERVER['HTTP_X_EFPP_TRUSTED'])) {
         return $h;
     }
+    // Note: legacy installs without X-EFPP-Trusted will fall through to the
+    // cookie path below, which keeps existing sessions working until the vhost
+    // is regenerated via apply.php. Header-only spoof without the trusted
+    // marker is no longer accepted here.
 
     // Fallback: read the username straight out of the form-login session cookie.
     // mod_auth_form stores it as "<realm>-user=<username>&<realm>-pw=<password>".
@@ -895,11 +938,15 @@ function efppAdminOnlyError() {
 
 /**
  * True when the request is arriving through the external (password-protected)
- * proxy port: the Host header carries the plugin's configured HTTP or HTTPS
- * port, or the external vhost forwarded X-Remote-User. Requests on the normal
- * FPP port (no plugin proxy) return false.
+ * proxy port. Uses server-side signals only: the Apache vhost sets
+ * X-EFPP-Trusted, or SERVER_PORT matches the configured external ports.
+ * Never trusts Host or X-Remote-User alone (both client-controllable).
  */
 function efppRequestIsExternal() {
+    // Server-set marker from the external vhost — not spoofable.
+    if (!empty($_SERVER['HTTP_X_EFPP_TRUSTED'])) {
+        return true;
+    }
     $port = 0;
     $httpsPort = 0;
     if (file_exists(EFPP_SETTINGS_FILE)) {
@@ -913,10 +960,9 @@ function efppRequestIsExternal() {
             }
         }
     }
-    $hostPort = (int)parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_PORT);
-    return ($port > 0 && $hostPort === $port)
-        || ($httpsPort > 0 && $hostPort === $httpsPort)
-        || !empty($_SERVER['HTTP_X_REMOTE_USER']);
+    $srvPort = (int)($_SERVER['SERVER_PORT'] ?? 0);
+    return ($port > 0 && $srvPort === $port)
+        || ($httpsPort > 0 && $srvPort === $httpsPort);
 }
 
 /**

@@ -21,31 +21,33 @@ function efpp_tab_active($page) {
 // stays consistent. This applies only while the page is being served through
 // the external plugin port; on the normal FPP port a leftover session cookie
 // must not lock anyone out of the dashboard.
-if (!function_exists('efppSessionIsUser')) {
+if (!function_exists('efppSessionIsUser') || !function_exists('efppRequestIsExternal')) {
 	require_once __DIR__ . '/api.php';
 }
 
 // Detect whether the request is coming through the external (password-protected)
-// proxy port, mirroring menu.inc: the Host header carries the plugin port or
-// the external vhost forwarded X-Remote-User.
-$efppPort = 0;
-$efppHttpsPort = 0;
-$efppCfg = __DIR__ . '/config/settings.json';
-if (file_exists($efppCfg)) {
-	$efppS = json_decode(@file_get_contents($efppCfg), true);
-	if (is_array($efppS)) {
-		if (!empty($efppS['port'])) {
-			$efppPort = (int)$efppS['port'];
-		}
-		if (!empty($efppS['https_port'])) {
-			$efppHttpsPort = (int)$efppS['https_port'];
+// proxy port. Use the server-set marker / SERVER_PORT (never Host/X-Remote-User
+// alone, which are client-controllable). Reuse api.php's canonical helper so
+// tabs.inc and menu.inc stay in sync.
+if (function_exists('efppRequestIsExternal')) {
+	$efppExternal = efppRequestIsExternal();
+} else {
+	// Fallback if api.php is unavailable: server-side SERVER_PORT check.
+	$efppPort = 0;
+	$efppHttpsPort = 0;
+	$efppCfg = __DIR__ . '/config/settings.json';
+	if (file_exists($efppCfg)) {
+		$efppS = json_decode(@file_get_contents($efppCfg), true);
+		if (is_array($efppS)) {
+			if (!empty($efppS['port'])) $efppPort = (int)$efppS['port'];
+			if (!empty($efppS['https_port'])) $efppHttpsPort = (int)$efppS['https_port'];
 		}
 	}
+	$srvPort = (int)($_SERVER['SERVER_PORT'] ?? 0);
+	$efppExternal = !empty($_SERVER['HTTP_X_EFPP_TRUSTED'])
+		|| ($efppPort > 0 && $srvPort === $efppPort)
+		|| ($efppHttpsPort > 0 && $srvPort === $efppHttpsPort);
 }
-$efppHostPort = (int)parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_PORT);
-$efppExternal = ($efppPort > 0 && $efppHostPort === $efppPort)
-	|| ($efppHttpsPort > 0 && $efppHostPort === $efppHttpsPort)
-	|| !empty($_SERVER['HTTP_X_REMOTE_USER']);
 
 if ($efppExternal && efppSessionIsUser()) {
 	?>
