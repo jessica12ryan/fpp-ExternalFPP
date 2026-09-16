@@ -33,7 +33,7 @@ form login (`mod_auth_form`) before it reverse-proxies requests to FPP's normal 
 ```
 config/                  Runtime settings + password file (gitignored)
 scripts/
-  fpp_install.sh         Install/update: preserves config, applies settings
+  fpp_install.sh         Install: creates default config, fixes perms, applies Apache settings
   fpp_uninstall.sh       Uninstall: disables vhost, removes Apache conf
   apply.php              Root helper that writes Apache conf + password file
 templates/
@@ -80,15 +80,16 @@ sudo bash scripts/fpp_install.sh
 
 The install script:
 
-1. Backs up `config/settings.json`, `config/plugin.fpp-ExternalFPP.htpasswd`, and `www/login.html`
-   to `/tmp/fpp-ExternalFPP-backup`.
-2. If the plugin is a git clone, it does a `git fetch` + hard reset to `origin/main`.
-3. Restores the backed-up config (so an update never loses your users/settings).
-4. Creates a default `settings.json` on fresh installs (`port=8080`,
+1. Creates a default `config/settings.json` on fresh installs (`port=8080`,
    `backend_port=80`, `https_port=8443`, `enable_http=0`, `enable_https=0`, no users),
    so the external ports are <b>disabled by default</b> until the user enables one and adds a user.
-5. Fixes ownership/permissions for the `fpp` web user.
-6. Runs `scripts/apply.php` to write the Apache config.
+2. Fixes ownership/permissions for the `fpp` web user and ensures `www/` is accessible.
+3. Runs `scripts/apply.php` to write the Apache config (idempotent). FPP's upgrade path
+   installs the pinned `sha` from `pluginInfo.json`; the script never fetches from GitHub.
+
+For manual `git clone` updates, run `git pull` yourself, then re-run the installer — it will
+preserve `config/` and only create missing `www/` pages (customized pages are left untouched;
+use the Pages tab Reset button to pull in updated templates).
 
 ### Re-applying after an upgrade
 
