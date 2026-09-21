@@ -66,7 +66,9 @@ function efppIsRoot() {
 }
 
 function efppRun($cmd) {
-    $full = (efppIsRoot() ? '' : 'sudo ') . $cmd;
+    // -n (non-interactive): fail fast instead of hanging on a password prompt
+    // when stdin is inherited from the plugin manager (upgrade freeze).
+    $full = (efppIsRoot() ? '' : 'sudo -n ') . $cmd;
     $output = array();
     $code = 0;
     exec($full . ' 2>&1', $output, $code);
@@ -878,9 +880,13 @@ function efppApply() {
             return array('success' => false, 'errors' => array($msg), 'messages' => $messages);
         }
 
-        if (!empty($newlyEnabledMods)) {
+        if (!empty($newlyEnabledMods) && getenv('EFPP_DEFER_RESTART') !== '1') {
             // a2enmod only loads new modules on a full restart (a graceful
             // reload ignores them), so restart rather than reload here.
+            // Skipped when EFPP_DEFER_RESTART=1 (plugin install/upgrade):
+            // restarting Apache mid-upgrade drops the connection running the
+            // upgrade. The <IfModule> guards make running without the new
+            // module safe; it activates on the next Config save or reboot.
             $ok2 = false;
             $r = efppRun('systemctl restart apache2');
             if ($r['code'] === 0) {
@@ -908,6 +914,10 @@ function efppApply() {
                 $msg = $err2 . ' The external port was disabled and Apache restarted.';
                 efppLog('ERROR: ' . $msg);
                 return array('success' => false, 'errors' => array($msg), 'messages' => $messages);
+            }
+            if (!empty($newlyEnabledMods) && getenv('EFPP_DEFER_RESTART') === '1') {
+                $messages[] = 'New Apache modules (' . implode(', ', $newlyEnabledMods) . ') will load on the next restart; re-save the Config tab or reboot to activate them.';
+                efppLog('Deferred Apache restart for new modules: ' . implode(', ', $newlyEnabledMods));
             }
         }
         $healthy = $enableHttp ? efppApacheHealthy($port) : true;
