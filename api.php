@@ -87,7 +87,12 @@ function efppSaveSettingsFile($s) {
     if (!is_dir(EFPP_PLUGIN_DIR . '/config')) {
         @mkdir(EFPP_PLUGIN_DIR . '/config', 0775, true);
     }
-    return @file_put_contents(EFPP_SETTINGS_FILE, json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+    $r = @file_put_contents(EFPP_SETTINGS_FILE, json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+    if ($r !== false) {
+        // Hashes are offline-crackable: tighten when safe, never break CLI reads.
+        efppTightenCredentialFile(EFPP_SETTINGS_FILE);
+    }
+    return $r;
 }
 
 function efppUsersFromSettings($s) {
@@ -130,6 +135,67 @@ function efppHashPassword($plain) {
     return password_hash((string)$plain, PASSWORD_BCRYPT);
 }
 
+function efppApacheRunUser() {
+    if (is_readable('/etc/apache2/envvars')) {
+        $c = @file_get_contents('/etc/apache2/envvars');
+        if (is_string($c) && preg_match('/APACHE_RUN_USER\s*=\s*([A-Za-z0-9_.-]+)/', $c, $m)) {
+            return $m[1];
+        }
+    }
+    return 'www-data';
+}
+
+function efppApacheRunGroup() {
+    if (is_readable('/etc/apache2/envvars')) {
+        $c = @file_get_contents('/etc/apache2/envvars');
+        if (is_string($c) && preg_match('/APACHE_RUN_GROUP\s*=\s*([A-Za-z0-9_.-]+)/', $c, $m)) {
+            return $m[1];
+        }
+    }
+    return 'www-data';
+}
+
+/**
+ * Fail-safe tighten to 640: only removes world-read when the Apache run-user
+ * can still read via owner or group. Otherwise leaves 644 and logs, so auth
+ * never 500s. The privileged apply.php (sudo) fixes ownership to fpp:group.
+ */
+function efppTightenCredentialFile($path) {
+    if (!file_exists($path)) {
+        return false;
+    }
+    $user = efppApacheRunUser();
+    $group = efppApacheRunGroup();
+    $owner = function_exists('posix_getpwuid') ? @posix_getpwuid(@fileowner($path)) : false;
+    $ownerName = is_array($owner) ? ($owner['name'] ?? '') : '';
+    $gid = @filegroup($path);
+    $groupInfo = function_exists('posix_getgrnam') ? @posix_getgrnam($group) : false;
+    $userInfo = function_exists('posix_getpwnam') ? @posix_getpwnam($user) : false;
+    $apacheReadable = ($ownerName !== '' && $ownerName === $user)
+        || (is_array($groupInfo) && (int)$gid === (int)$groupInfo['gid'])
+        || (is_array($groupInfo) && is_array($userInfo) && in_array($user, (array)($groupInfo['members'] ?? array()), true))
+        || (is_array($userInfo) && (int)$gid === (int)$userInfo['gid'])
+        || $user === 'fpp' && $ownerName === 'fpp';
+    // Best-effort group fix (works when fpp is a member of www-data).
+    if (!$apacheReadable) {
+        @chgrp($path, $group);
+        $gid = @filegroup($path);
+        $apacheReadable = is_array($groupInfo) && (int)$gid === (int)$groupInfo['gid'];
+    }
+    if ($apacheReadable) {
+        @chown($path, 'fpp');
+        @chmod($path, 0640);
+        $perms = @fileperms($path);
+        if ($perms !== false && !($perms & 0004)) {
+            return true;
+        }
+    } else {
+        efppLog('WARNING: leaving ' . $path . ' world-readable (Apache user ' . $user . ' not in file group; apply.php will fix ownership)');
+        @chmod($path, 0644);
+    }
+    return false;
+}
+
 /**
  * Keeps the Apache group file in sync with the Admin role (read per request by
  * mod_authz_groupfile, so role changes apply without reloading Apache). The
@@ -150,7 +216,7 @@ function efppWriteGroupsFile() {
         return false;
     }
     @chown(EFPP_GROUPS_FILE, 'fpp');
-    @chmod(EFPP_GROUPS_FILE, 0644);
+    efppTightenCredentialFile(EFPP_GROUPS_FILE);
     return true;
 }
 
@@ -181,6 +247,7 @@ function efppWriteHtpasswd($users) {
     if (@file_put_contents(EFPP_HTPASSWD_FILE, $content) === false) {
         return array(false, 'Could not write the password file to ' . EFPP_HTPASSWD_FILE);
     }
+    efppTightenCredentialFile(EFPP_HTPASSWD_FILE);
     return array(true, 'Password file written for ' . count($users) . ' user(s) using bcrypt');
 }
 
@@ -468,7 +535,7 @@ function efppDefaultChangePasswordPage() {
         . '<script>'
         . 'function efppSubmit(){var p=document.getElementById("efpp_password").value,c=document.getElementById("efpp_password_confirm").value;'
         . 'fetch("/api/plugin/fpp-ExternalFPP/change-my-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:p,password_confirm:c})})'
-        . '.then(function(r){return r.json();}).then(function(d){if(d.success){window.location.href="/";}else{document.getElementById("efpp_message").textContent=(d.errors||[]).join(" ");}});}'
+        . '.then(function(r){return r.json();}).then(function(d){if(d.success){window.location.href="/logout";}else{document.getElementById("efpp_message").textContent=(d.errors||[]).join(" ");}});}'
         . '</script></body></html>';
 }
 
@@ -1068,16 +1135,13 @@ function efppChangeMyPasswordEndpoint() {
     }
     efppLog('User changed own password: ' . $user);
 
-    // The form-login session cookie holds the user's password, and mod_auth_form
-    // re-validates it against the password file on every request. Leaving the old
-    // cookie in place would make the redirect to '/' fail validation and bounce
-    // the user back to the login page, so re-issue the session cookie with the
-    // new password here (plaintext, matching what Apache wrote at login time).
-    $sessionValue = urlencode(EFPP_SESSION_REALM) . '-user=' . urlencode($user)
-        . '&' . urlencode(EFPP_SESSION_REALM) . '-pw=' . urlencode($password);
-    header('Set-Cookie: ' . EFPP_SESSION_COOKIE . '=' . $sessionValue . '; path=/; HttpOnly; SameSite=Lax');
-
-    return json(array('success' => true, 'messages' => array('Password changed. Continue to the FPP web UI.'), 'errors' => array()));
+    // The form-login session stores the password and mod_auth_form re-validates
+    // it on every request. With session_crypto enabled the cookie is encrypted
+    // server-side and PHP must not hand-craft a plaintext replacement (that
+    // would both leak the password and fail validation). Leave the stale cookie
+    // in place: the client follows up at /logout (see templates), which clears
+    // it and lands on the login page for a fresh sign-in with the new password.
+    return json(array('success' => true, 'messages' => array('Password changed. Please log in again with the new password.'), 'errors' => array(), 'relogin' => true));
 }
 
 function efppRequestData() {
@@ -1447,10 +1511,6 @@ function efppPublicCheck($force = false) {
     }
 
     $s = efppLoadSettings();
-    $host = efppGetPublicIp();
-    if ($host === null) {
-        return array('success' => false, 'checked_at' => time(), 'error' => 'Could not determine the public IP (no outbound internet?).');
-    }
 
     $ports = array();
     if (!empty($s['enable_http'] ?? 0)) {
@@ -1458,6 +1518,19 @@ function efppPublicCheck($force = false) {
     }
     if (!empty($s['enable_https'] ?? 0)) {
         $ports[] = array('scheme' => 'https', 'port' => efppPublicPort($s, 'https'));
+    }
+
+    // No outbound lookups when no external ports are enabled (Status tab loads
+    // this on every visit; previously it hit ipify/icanhazip/ifconfig.me first).
+    if (empty($ports)) {
+        $out = array('success' => true, 'checked_at' => time(), 'public_ip' => '', 'ports' => array());
+        @file_put_contents($cacheFile, json_encode($out));
+        return $out;
+    }
+
+    $host = efppGetPublicIp();
+    if ($host === null) {
+        return array('success' => false, 'checked_at' => time(), 'error' => 'Could not determine the public IP (no outbound internet?).');
     }
 
     $checks = array();

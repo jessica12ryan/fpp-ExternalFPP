@@ -192,7 +192,7 @@ $deniedCustom = efppPageCustomized($pluginDir . '/www/access-denied.html', $plug
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: pw1.value, password_confirm: pw2.value })
       }).then(r =&gt; r.json())
-        .then(d =&gt; d.success ? location.replace("/") : alert((d.errors || []).join(" ")));
+        .then(d =&gt; d.success ? location.replace("/logout") : alert((d.errors || []).join(" ")));
     };
   &lt;/script&gt;
 &lt;/body&gt;
@@ -200,9 +200,10 @@ $deniedCustom = efppPageCustomized($pluginDir . '/www/access-denied.html', $plug
 
                 <p>Notes:</p>
                 <ul>
-                    <li>Changing the password also refreshes the login session: the API re-issues the
-                        session cookie with the new password, so the visitor stays signed in and the
-                        redirect to <code>/</code> goes straight into the FPP UI (no login prompt).</li>
+                    <li>Changing the password invalidates the login session (it stores the old
+                        password), so send the visitor to <code>/logout</code> on success: that
+                        clears the stale session and lands on the login page for a fresh
+                        sign-in with the new password.</li>
                     <li>The password must be at least 6 characters long and both fields must match.
                         Reusing the current password is allowed.</li>
                     <li>The page should call <code>session-user</code> and forward to <code>/</code> when

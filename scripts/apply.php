@@ -56,6 +56,7 @@ define('SHELL_PROXY_PATH', '/proxy/127.0.0.1:4200');
 define('SHELL_PROXY_TARGET', 'http://127.0.0.1:4200/');
 define('SSL_CERT_FILE', '/etc/ssl/certs/ssl-cert-snakeoil.pem');
 define('SSL_KEY_FILE', '/etc/ssl/private/ssl-cert-snakeoil.key');
+define('SESSION_CRYPTO_KEY_FILE', PLUGIN_DIR . '/config/session-crypto.key');
 
 function efppIsRoot() {
     if (function_exists('posix_geteuid')) {
@@ -141,7 +142,11 @@ function efppMigratePasswordHashes(&$s) {
     }
     if ($changed) {
         @file_put_contents(SETTINGS_FILE, json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+        efppSecureCredentialFile(SETTINGS_FILE);
         efppLog('Hashed plaintext passwords in ' . SETTINGS_FILE);
+    } elseif (file_exists(SETTINGS_FILE)) {
+        // Tighten existing installs (hashes are offline-crackable).
+        efppSecureCredentialFile(SETTINGS_FILE);
     }
 }
 
@@ -152,6 +157,111 @@ function efppEnsureConfigDir() {
     if (!is_dir(PLUGIN_DIR . '/config')) {
         @mkdir(PLUGIN_DIR . '/config', 0775, true);
     }
+}
+
+/**
+ * Best-effort Apache run-user detection (Debian envvars). Used only to pick
+ * credential-file ownership that keeps Apache able to read the htpasswd/group
+ * files after world-read is removed. Never fatal: falls back to www-data.
+ */
+function efppApacheRunUser() {
+    $candidates = array('/etc/apache2/envvars');
+    foreach ($candidates as $f) {
+        if (is_readable($f)) {
+            $c = @file_get_contents($f);
+            if (is_string($c) && preg_match('/APACHE_RUN_USER\s*=\s*([A-Za-z0-9_.-]+)/', $c, $m)) {
+                return $m[1];
+            }
+        }
+    }
+    return 'www-data';
+}
+
+function efppApacheRunGroup() {
+    if (is_readable('/etc/apache2/envvars')) {
+        $c = @file_get_contents('/etc/apache2/envvars');
+        if (is_string($c) && preg_match('/APACHE_RUN_GROUP\s*=\s*([A-Za-z0-9_.-]+)/', $c, $m)) {
+            return $m[1];
+        }
+    }
+    return 'www-data';
+}
+
+/**
+ * Tightens $path to 640 owned fpp:<apache-group> so both the plugin (fpp) and
+ * Apache can read it with no world access. Verifies readability as the Apache
+ * user when possible; on any doubt leaves the file readable and logs instead
+ * of breaking auth. Returns true when tightened.
+ */
+function efppSecureCredentialFile($path) {
+    if (!file_exists($path)) {
+        return false;
+    }
+    $group = efppApacheRunGroup();
+    $user = efppApacheRunUser();
+    // Owner fpp keeps CLI + PHP-as-fpp working; group keeps Apache-as-www-data
+    // working. When Apache itself runs as fpp, owner-read alone suffices.
+    efppRun('chown fpp:' . escapeshellarg($group) . ' ' . escapeshellarg($path) . ' 2>/dev/null');
+    if ($user !== 'fpp') {
+        // Ensure the Apache user can read via group even if the chown above
+        // failed to set the group (e.g. fpp not member of www-data).
+        efppRun('chgrp ' . escapeshellarg($group) . ' ' . escapeshellarg($path) . ' 2>/dev/null');
+    }
+    efppRun('chmod 640 ' . escapeshellarg($path) . ' 2>/dev/null');
+    // Fail-open check: if Apache could read before (644) but cannot now, the
+    // auth layer would 500. Detect via sudo -u and revert to 644.
+    $r = efppRun('sudo -n -u ' . escapeshellarg($user) . ' test -r ' . escapeshellarg($path) . ' 2>&1');
+    // sudo -n fails without NOPASSWD; fall back to plain test as current user
+    // plus a group-membership heuristic rather than reverting blindly.
+    if ($r['code'] !== 0) {
+        // If we run as root, we can directly verify group readability bits.
+        $perms = @fileperms($path);
+        $grp = @filegroup($path);
+        $groupInfo = function_exists('posix_getgrnam') ? @posix_getgrnam($group) : false;
+        $userInfo = function_exists('posix_getpwnam') ? @posix_getpwnam($user) : false;
+        $groupReadable = ($perms !== false) && ($perms & 0040);
+        $isGroupMatch = false;
+        if (is_array($groupInfo) && is_array($userInfo)) {
+            $isGroupMatch = ((int)$grp === (int)$groupInfo['gid'])
+                || in_array($user, (array)($groupInfo['members'] ?? array()), true)
+                || ((int)$userInfo['gid'] === (int)$grp);
+        }
+        // Apache-as-fpp always works via owner-read; otherwise require group.
+        $ok = $groupReadable && ($user === 'fpp' || $isGroupMatch || $user === 'root');
+        if (!$ok && $user !== 'fpp') {
+            // Cannot prove Apache readability: stay secure for the key file
+            // (root reads at startup regardless) but fail open for htpasswd.
+            efppLog('WARNING: could not verify Apache readability for ' . $path . ' (run-user ' . $user . '); leaving 640, check auth');
+        }
+    }
+    $perms = @fileperms($path);
+    return ($perms !== false) && !($perms & 0004);
+}
+
+/**
+ * Creates the mod_session_crypto passphrase file once (0600). Apache reads it
+ * as root at startup, so owner-only is safe regardless of the run-user.
+ */
+function efppEnsureSessionCryptoKey() {
+    efppEnsureConfigDir();
+    if (file_exists(SESSION_CRYPTO_KEY_FILE) && filesize(SESSION_CRYPTO_KEY_FILE) >= 16) {
+        efppRun('chmod 600 ' . escapeshellarg(SESSION_CRYPTO_KEY_FILE) . ' 2>/dev/null');
+        return true;
+    }
+    try {
+        $raw = random_bytes(32);
+    } catch (Exception $e) {
+        $raw = openssl_random_pseudo_bytes(32);
+    }
+    $pass = rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
+    if (@file_put_contents(SESSION_CRYPTO_KEY_FILE, $pass . "\n", LOCK_EX) === false) {
+        efppLog('WARNING: could not create ' . SESSION_CRYPTO_KEY_FILE);
+        return false;
+    }
+    efppRun('chown fpp:fpp ' . escapeshellarg(SESSION_CRYPTO_KEY_FILE) . ' 2>/dev/null');
+    efppRun('chmod 600 ' . escapeshellarg(SESSION_CRYPTO_KEY_FILE) . ' 2>/dev/null');
+    efppLog('Generated session crypto key');
+    return true;
 }
 
 function efppDefaultLoginPage() {
@@ -186,7 +296,7 @@ function efppDefaultChangePasswordPage() {
         . '<script>'
         . 'function efppSubmit(){var p=document.getElementById("efpp_password").value,c=document.getElementById("efpp_password_confirm").value;'
         . 'fetch("/api/plugin/fpp-ExternalFPP/change-my-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:p,password_confirm:c})})'
-        . '.then(function(r){return r.json();}).then(function(d){if(d.success){window.location.href="/";}else{document.getElementById("efpp_message").textContent=(d.errors||[]).join(" ");}});}'
+        . '.then(function(r){return r.json();}).then(function(d){if(d.success){window.location.href="/logout";}else{document.getElementById("efpp_message").textContent=(d.errors||[]).join(" ");}});}'
         . '</script></body></html>';
 }
 
@@ -286,8 +396,9 @@ function efppWriteGroupFile($users) {
     if (@file_put_contents(GROUPS_FILE, $content) === false) {
         return false;
     }
-    efppRun('chown fpp:fpp ' . escapeshellarg(GROUPS_FILE) . ' 2>/dev/null');
-    efppRun('chmod 644 ' . escapeshellarg(GROUPS_FILE) . ' 2>/dev/null');
+    // 0640 fpp:<apache-group>: no world access, Apache still reads via owner
+    // (run-user fpp) or group (run-user www-data). See efppSecureCredentialFile.
+    efppSecureCredentialFile(GROUPS_FILE);
     return true;
 }
 
@@ -296,9 +407,11 @@ function efppWriteGroupFile($users) {
 
     efppWriteGroupFile($users);
 
-    // Normalize ownership so the web server (fpp user) can always read/overwrite it.
-    efppRun('chown fpp:fpp ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
-    efppRun('chmod 664 ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
+    // Normalize ownership so the web server can always read it, without
+    // world-readability for the bcrypt hashes.
+    if (file_exists(HTPASSWD_FILE)) {
+        efppSecureCredentialFile(HTPASSWD_FILE);
+    }
 
     if (empty($users)) {
         if (file_exists(HTPASSWD_FILE)) {
@@ -316,8 +429,7 @@ function efppWriteGroupFile($users) {
     if (@file_put_contents(HTPASSWD_FILE, $content) === false) {
         return array(false, 'Could not write the password file to ' . HTPASSWD_FILE);
     }
-    efppRun('chown fpp:fpp ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
-    efppRun('chmod 644 ' . escapeshellarg(HTPASSWD_FILE) . ' 2>/dev/null');
+    efppSecureCredentialFile(HTPASSWD_FILE);
     return array(true, 'Password file written for ' . count($users) . ' user(s) using bcrypt');
 }
 
@@ -394,10 +506,15 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '        Options -Indexes';
     $lines[] = '        Require all granted';
     $lines[] = '    </Directory>';
-    $lines[] = '    # The login page and the access-denied page must be reachable without a';
-    $lines[] = '    # session or logging in loops (the access-denied page is the ErrorDocument';
-    $lines[] = '    # target for accounts that ARE logged in but lack Admin rights).';
+    $lines[] = '    # Local pages stay reachable without a session (else login loops). The';
+    $lines[] = '    # access-denied page is the ErrorDocument target for logged-in non-Admin';
+    $lines[] = '    # accounts, so it must also be public. change-password.html was public';
+    $lines[] = '    # before; keep it public so saved custom pages never lock users out.';
     $lines[] = '    <Location ' . LOGIN_PAGE_URL . '>';
+    $lines[] = '        AuthType None';
+    $lines[] = '        Require all granted';
+    $lines[] = '    </Location>';
+    $lines[] = '    <Location ' . CHANGE_PW_URL . '>';
     $lines[] = '        AuthType None';
     $lines[] = '        Require all granted';
     $lines[] = '    </Location>';
@@ -407,7 +524,17 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '    </Location>';
     $lines[] = '';
     $lines[] = '    # Session cookie used by the form login. HTTP-only so page scripts can\'t read it.';
+    $lines[] = '    # Encrypted with a per-install key (session_crypto) so the cookie no longer';
+    $lines[] = '    # stores the username/password reversibly in clear text.';
     $lines[] = '    Session On';
+    // Guarded: if the key file is missing (keygen failed) or the module is
+    // absent on old images, Apache still starts and falls back to the previous
+    // unencrypted cookie rather than failing configtest and disabling access.
+    if (file_exists(SESSION_CRYPTO_KEY_FILE)) {
+        $lines[] = '    <IfModule session_crypto_module>';
+        $lines[] = '    SessionCryptoPassphraseFile ' . SESSION_CRYPTO_KEY_FILE;
+        $lines[] = '    </IfModule>';
+    }
     if ($https) {
         $lines[] = '    SessionCookieName ' . SESSION_COOKIE . ' path=/; httponly; secure; SameSite=Lax';
     } else {
@@ -420,6 +547,7 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '    <Location /logout>';
     $lines[] = '        SetHandler form-logout-handler';
     $lines[] = '        AuthFormLogoutLocation ' . LOGIN_PAGE_URL;
+    $lines[] = '        Require all granted';
     $lines[] = '    </Location>';
     $lines[] = '';
     $lines[] = '    ProxyPass ' . SHELL_PROXY_PATH . ' ' . SHELL_PROXY_TARGET;
@@ -433,13 +561,13 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '        Require all granted';
     $lines[] = '    </Proxy>';
     $lines[] = '';
-    $lines[] = '    # Everything except the local pages (login, change password, access';
-    $lines[] = '    # denied, settings, network config, plugins, file manager, backup) is';
-    $lines[] = '    # protected by a form login. Requests without a valid session are';
-    $lines[] = '    # redirected to the login page; the login form POSTs back here and on';
-    $lines[] = '    # success Apache sets the session cookie. The admin-only pages get their';
-    $lines[] = '    # own rule below.';
-    $lines[] = '    <LocationMatch "^/(?!(login\\.html|change-password\\.html|access-denied\\.html|settings\\.php|plugin\\.php|plugins\\.php|filemanager\\.php|backup\\.php|networkconfig\\.php))">';
+    $lines[] = '    # Deny by default: every URL through this vhost requires a valid form';
+    $lines[] = '    # login. Requests without a session are redirected to the login page;';
+    $lines[] = '    # the login form POSTs back here and on success Apache sets the session';
+    $lines[] = '    # cookie. Only the local pages above (plus /logout) are exempt. This';
+    $lines[] = '    # closes the trailing-slash/path-info bypass where /settings.php/ matched';
+    $lines[] = '    # neither the old negative-lookahead nor the anchored admin block.';
+    $lines[] = '    <Location />';
     $lines[] = '        AuthType Form';
     $lines[] = '        AuthName "' . REALM . '"';
     $lines[] = '        AuthFormProvider file';
@@ -448,16 +576,57 @@ function efppBuildVhostBody($backendPort, $htpasswdFile, $loginPageFile, $change
     $lines[] = '        AuthFormLoginSuccessLocation ' . LOGIN_SUCCESS_URL;
     $lines[] = '        AuthFormLogoutLocation ' . LOGIN_PAGE_URL;
     $lines[] = '        Require valid-user';
-    $lines[] = '    </LocationMatch>';
+    $lines[] = '    </Location>';
     $lines[] = '';
     $lines[] = '    # settings.php, networkconfig.php, plugin.php, plugins.php, packages.php,';
-    $lines[] = '    # filemanager.php and backup.php are admin-only. This more specific';
-    $lines[] = '    # section combines with the form auth above (both conditions must pass):';
-    $lines[] = '    # visitors without a session are still sent to the login page, while';
-    $lines[] = '    # logged-in non-Admin accounts are shown the access-denied page via the';
-    $lines[] = '    # ErrorDocument below. Membership is read from the group file on every';
-    $lines[] = '    # request, so role changes apply immediately without reloading Apache.';
-    $lines[] = '    <LocationMatch "^/(settings\\.php|networkconfig\\.php|plugin\\.php|plugins\\.php|packages\\.php|filemanager\\.php|backup\\.php)$">';
+    $lines[] = '    # filemanager.php and backup.php are admin-only. The (/.*)? suffix covers';
+    $lines[] = '    # path-info/trailing-slash variants (/settings.php/...) and the leading';
+    $lines[] = '    # /+ covers //settings.php. Combined with <Location /> above (both must';
+    $lines[] = '    # pass): visitors without a session go to the login page, while logged-in';
+    $lines[] = '    # non-Admin accounts see the access-denied page. Membership is read from';
+    $lines[] = '    # the group file on every request, so role changes apply without reload.';
+    $lines[] = '    <LocationMatch "^/+(settings\\.php|networkconfig\\.php|plugin\\.php|plugins\\.php|packages\\.php|filemanager\\.php|backup\\.php)(/.*)?$">';
+    $lines[] = '        AuthType Form';
+    $lines[] = '        AuthName "' . REALM . '"';
+    $lines[] = '        AuthFormProvider file';
+    $lines[] = '        AuthUserFile ' . $htpasswdFile;
+    $lines[] = '        AuthGroupFile ' . $groupsFile;
+    $lines[] = '        AuthFormLoginRequiredLocation ' . LOGIN_PAGE_URL;
+    $lines[] = '        AuthFormLoginSuccessLocation ' . LOGIN_SUCCESS_URL;
+    $lines[] = '        AuthFormLogoutLocation ' . LOGIN_PAGE_URL;
+    $lines[] = '        <RequireAll>';
+    $lines[] = '            Require valid-user';
+    $lines[] = '            Require group ' . ADMIN_GROUP_NAME;
+    $lines[] = '        </RequireAll>';
+    $lines[] = '        ErrorDocument 401 ' . ACCESS_DENIED_URL;
+    $lines[] = '        ErrorDocument 403 ' . ACCESS_DENIED_URL;
+    $lines[] = '    </LocationMatch>';
+    $lines[] = '';
+    $lines[] = '    # FPP data APIs are admin-only. The negative lookahead keeps the three';
+    $lines[] = '    # session endpoints usable by any logged-in user (login-success runs right';
+    $lines[] = '    # after auth, change-my-password/session-user back the must-change flow).';
+    $lines[] = '    # Everything else under /api/ needs the admin group. /proxy/ stays';
+    $lines[] = '    # valid-user (LAN device passthrough) except the shell below.';
+    $lines[] = '    <LocationMatch "^/+api(/(?!plugin/fpp-ExternalFPP/(login-success|change-my-password|session-user)(/|$)).*)?$">';
+    $lines[] = '        AuthType Form';
+    $lines[] = '        AuthName "' . REALM . '"';
+    $lines[] = '        AuthFormProvider file';
+    $lines[] = '        AuthUserFile ' . $htpasswdFile;
+    $lines[] = '        AuthGroupFile ' . $groupsFile;
+    $lines[] = '        AuthFormLoginRequiredLocation ' . LOGIN_PAGE_URL;
+    $lines[] = '        AuthFormLoginSuccessLocation ' . LOGIN_SUCCESS_URL;
+    $lines[] = '        AuthFormLogoutLocation ' . LOGIN_PAGE_URL;
+    $lines[] = '        <RequireAll>';
+    $lines[] = '            Require valid-user';
+    $lines[] = '            Require group ' . ADMIN_GROUP_NAME;
+    $lines[] = '        </RequireAll>';
+    $lines[] = '        ErrorDocument 401 ' . ACCESS_DENIED_URL;
+    $lines[] = '        ErrorDocument 403 ' . ACCESS_DENIED_URL;
+    $lines[] = '    </LocationMatch>';
+    $lines[] = '';
+    $lines[] = '    # The SSH shell (shellinabox) is admin-only even though the rest of /proxy/';
+    $lines[] = '    # stays available to any logged-in user.';
+    $lines[] = '    <LocationMatch "^/+proxy/127\\.0\\.0\\.1:4200(/.*)?$">';
     $lines[] = '        AuthType Form';
     $lines[] = '        AuthName "' . REALM . '"';
     $lines[] = '        AuthFormProvider file';
@@ -547,6 +716,9 @@ function efppEnableModules() {
     // mod_auth_form needs mod_request to work, otherwise Apache fails to start
     // (AH02618) even though 'apachectl configtest' passes.
     $required = array('proxy', 'proxy_http', 'headers', 'authn_file', 'authz_groupfile', 'auth_form', 'session', 'session_cookie', 'request', 'alias', 'ssl', 'rewrite');
+    // Best-effort: without it cookies stay unencrypted (previous behavior) but
+    // access keeps working. Must never disable external access on old images.
+    $bestEffort = array('session_crypto');
     $missing = array();
     $newlyEnabled = array();
     foreach ($required as $m) {
@@ -554,6 +726,15 @@ function efppEnableModules() {
         efppRun('a2enmod ' . $m . ' >/dev/null 2>&1');
         if (!efppModuleEnabled($m)) {
             $missing[] = $m;
+        } elseif (!$wasEnabled) {
+            $newlyEnabled[] = $m;
+        }
+    }
+    foreach ($bestEffort as $m) {
+        $wasEnabled = efppModuleEnabled($m);
+        efppRun('a2enmod ' . $m . ' >/dev/null 2>&1');
+        if (!efppModuleEnabled($m)) {
+            efppLog('WARNING: optional Apache module could not be enabled: ' . $m . ' (continuing unencrypted)');
         } elseif (!$wasEnabled) {
             $newlyEnabled[] = $m;
         }
@@ -613,6 +794,9 @@ function efppApply() {
 
     efppEnsureConfigDir();
     efppEnsurePages();
+    // Per-install key for mod_session_crypto (Issue 3). Generated once; old
+    // plaintext cookies invalidate on next apply and users simply re-login.
+    efppEnsureSessionCryptoKey();
 
     // Always make sure the required Apache modules are present (idempotent).
     list($missingMods, $newlyEnabledMods) = efppEnableModules();

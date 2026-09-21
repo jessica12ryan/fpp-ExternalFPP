@@ -115,11 +115,15 @@ $pluginDir = __DIR__;
                     FPP's built-in self-signed certificate, so login details and cookies are
                     encrypted in transit.</li>
                 <li>If you enable the <b>HTTP port</b>, it uses <b>plain HTTP</b>:
-                    the login password is submitted as plain form data, and the session is tracked
-                    with a cookie that stores the login details in a reversible form. Both can be
-                    read by anyone on the network. Do not expose the HTTP port to the public
+                    the login password is submitted as plain form data and the session cookie
+                    is visible on the network (at rest the cookie is encrypted with a
+                    per-install key). Do not expose the HTTP port to the public
                     internet &mdash; put it behind a VPN or a TLS reverse proxy for remote access.
                     To force HTTPS only, uncheck <b>Enable HTTP port</b>.</li>
+                <li>Accounts have roles: <b>Admin</b> has full access, while <b>User</b> cannot
+                    open the settings/plugin/network/file-manager/backup pages, call the FPP
+                    data APIs, or use the SSH shell proxy. After changing a password you are
+                    signed out and sign back in with the new password.</li>
                 <li>This plugin provides its own password protection. If FPP's built-in
                     <b>UI Password</b> is also switched on, you may be asked for a second
                     password. The simplest fix is to turn FPP's built-in UI password off
