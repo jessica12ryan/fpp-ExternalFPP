@@ -4,7 +4,7 @@
 
 ---
 
-***Upgrade to 10.3+:*** It is strongly recommended that you upgrade to at least FPP 10.3 before installing this plugin due to an internet-wide PHP bug in previous versions that allows an attacker to remotely execute code on your machine. This is not a plugin or FPP bug; it was in the php upstream and major organizations have also been affected.
+***Upgrade OS to 10.3+:*** It is strongly recommended that you upgrade your FPP OS level to at least "10.3-2026-10b" before installing this plugin due to an internet-wide PHP bug in previous versions that allows an attacker to remotely execute code on your machine. This is not a plugin or FPP bug; it was in the php upstream and major organizations have also been affected.
 
 ---
 
