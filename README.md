@@ -4,6 +4,10 @@
 
 ---
 
+***Upgrade to 10.3+:*** It is strongly recommended that you upgrade to at least FPP 10.3 before installing this plugin due to an internet-wide PHP bug in previous versions that allows an attacker to remotely execute code on your machine. This is not a plugin or FPP bug; it was in the php upstream and major organizations have also been affected.
+
+---
+
 ## What it does
 
 FPP's normal web UI (port `80`) is left exactly as it is. This plugin opens an **additional web address** via HTTP or HTTPS that shows the *same* FPP interface, but only after a **login page**.
