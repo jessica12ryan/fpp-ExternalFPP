@@ -7,6 +7,7 @@
 	"srcURL": "https://github.com/jessica12ryan/fpp-ExternalFPP.git",
 	"bugURL": "https://github.com/jessica12ryan/fpp-ExternalFPP/issues",
 	"iconURL": "https://raw.githubusercontent.com/jessica12ryan/fpp-ExternalFPP/main/icon.png",
+	"releaseNotesStyle": "gitHistory",
 	"privacy": {
 		"summary": "Adds a password-protected copy of the FPP web interface on extra ports. When you check public access it asks online services for your public address and whether the port is reachable.",
 		"sends": [
